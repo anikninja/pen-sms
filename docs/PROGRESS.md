@@ -301,3 +301,15 @@ The first CI run failed: of 5 simultaneous enrolments, one returned 409 "Could n
 - **Cause:** every concurrent transaction read the same highest Student ID; the P2002 retry lets only one win per round, so 3 attempts can't cover 5 requests. Reproduced locally: 20 simultaneous enrolments → 12–14 failures per round.
 - **Fix:** `createStudent` takes a transaction-scoped advisory lock per academic year before reading the highest ID (`src/lib/services/students.ts`). The retry remains as a safety net. architecture.md §4.2 updated.
 - **Verified:** 20 simultaneous × 3 rounds and 50 simultaneous × 2 rounds → all created, unique, gap-free. The e2e race check now uses 10 simultaneous enrolments and prints each error. Full CI sequence locally: 99 unit tests, 106 API checks passed.
+
+### 2026-09-17 — Fix: "changing the default value state of an uncontrolled FieldControl"
+
+Base UI logs this in development when a mounted `Input` receives a different `defaultValue`. Reproduced in headless Chrome against `next dev`:
+
+| Where | Cause | Fix |
+|---|---|---|
+| Login, wrong password | email `defaultValue` changed from empty to the submitted email | email input keyed on the submitted email |
+| Students → Clear / sidebar link from a filtered URL | the search form stayed mounted while filters changed — **Status also kept showing the old filter** | search form keyed on the active filters |
+| Adjust fee dialog (intermittent) | a save refreshed the fee before the dialog closed | dialog forms are separate components that mount on open and freeze their defaults (`useInitialValue`); same for Record payment, Assessment and the edit-student form |
+
+**Verified:** 10 scenarios × 3 runs against `next dev` → 0 warnings; Clear and sidebar navigation reset the filters; reopening Adjust fee shows the newly saved fee. Regression: 111 unit tests, 14/14 staff browser flows on the production build.

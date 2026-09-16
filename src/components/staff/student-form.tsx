@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createStudentAction, updateStudentAction } from "@/actions/students"
 import { formValues, toFieldErrors, useServerAction } from "@/components/shared/use-server-action"
 import { ButtonLink } from "@/components/shared/button-link"
+import { useInitialValue } from "@/components/shared/use-initial-value"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -19,17 +20,14 @@ const STATUSES = [
   { value: "COMPLETED", label: "Completed" },
 ]
 
-export function StudentForm({
-  mode,
-  programmes,
-  student,
-  defaultYear,
-}: {
+export function StudentForm(props: {
   mode: "create" | "edit"
   programmes: ProgrammeDto[]
   student?: StudentDto
   defaultYear: number
 }) {
+  // Saving revalidates this page before redirecting; frozen defaults keep the uncontrolled inputs stable.
+  const { mode, programmes, student, defaultYear } = useInitialValue(props)
   const router = useRouter()
   const { run, pending, fieldErrors } = useServerAction()
 

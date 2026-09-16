@@ -46,7 +46,14 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         }
       />
 
-      <form method="get" className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-end" role="search">
+      {/* Keyed on the active filters: client navigation (Clear, sidebar, dashboard links) reuses this
+          component, and uncontrolled fields ignore new defaultValues — remounting resets them. */}
+      <form
+        key={`${search.q ?? ""}|${search.programme ?? ""}|${search.status ?? ""}`}
+        method="get"
+        className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-end"
+        role="search"
+      >
         <div className="flex flex-1 flex-col gap-1.5">
           <Label htmlFor="q">Name or Student ID</Label>
           <Input id="q" name="q" defaultValue={search.q ?? ""} placeholder="e.g. Rahim or SMS-2026-0002" />

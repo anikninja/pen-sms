@@ -36,3 +36,4 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 31. Staff assessments and results - create / edit / open / close, grading table with live classification, publish and withhold per result, per student and per assessment with overdue warning
 32. Fix: fee due dates are calendar days - overdue starts the day after the due date in Dhaka; seeded tariff due dates made calendar dates
 33. Phase 4 verified - 14 staff flows in headless Chrome with no console errors, 111 unit tests, 106 API checks, build passes
+34. Fix: Base UI uncontrolled input warning - key login email and students search form, freeze dialog and edit-form defaults; stale Status filter after Clear fixed
