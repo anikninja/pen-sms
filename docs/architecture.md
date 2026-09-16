@@ -6,6 +6,8 @@
 > **Required stack:** Next.js 16+ (App Router), PostgreSQL, Prisma ORM, Tailwind CSS or a component library (Shadcn UI preferred).
 >
 > **Assessment constraint:** This is a focused Registry module, not a full Student Management System. Prioritize deliberate product decisions, edge cases, clean schema/API design, and a working end-to-end MVP.
+>
+> **This document is the single specification for the build.** Where the code and this document disagree, fix one of them in the same change. Progress is tracked in [PROGRESS.md](PROGRESS.md); a one-line-per-step history is kept in [development_log.md](development_log.md) (§2.4).
 
 ---
 
@@ -77,9 +79,9 @@ A line-by-line re-check of the brief against the first draft of this document fo
 | 1 | The fee was derived live from the programme tariff. Staff had no in-app way to assign a fee, and editing a tariff would rewrite the balance of students who had already paid. | Assign a fee amount to each student based on their programme (F1) | New `StudentFee` entity: copied from the programme tariff at enrolment, adjustable by staff (§6A) |
 | 2 | Assessments were not linked to a programme, so every student would see, and be counted as pending for, every assessment. | Students submit against assessments created by staff (A1–A2) | `Assessment.programmeId` (§8, §19) |
 | 3 | No concept of an open assessment, so late submissions could be accepted forever. | Upload against an **open** assessment (A2) | `Assessment.isOpen`, controlled by staff (§8, §9) |
-| 4 | The build prompt allowed resubmission at any time. | Allow resubmission **before the deadline** (A3) | Replacing a submission after the deadline is rejected; a first late submission is still accepted (§9, §10) |
+| 4 | An earlier implementation plan allowed resubmission at any time. | Allow resubmission **before the deadline** (A3) | Replacing a submission after the deadline is rejected; a first late submission is still accepted (§9, §10) |
 | 5 | Publishing was designed per result and per assessment only. | Publish or withhold results **per student** (R3) | Per-student marksheet publish / withhold (§13, §23) |
-| 6 | The build prompt removed every API route except file download. | Working API routes are graded (T1) | Small JSON API of Route Handlers over the shared service layer (§17.1, §29) |
+| 6 | An earlier implementation plan removed every API route except file download. | Working API routes are graded (T1) | Small JSON API of Route Handlers over the shared service layer (§17.1, §29) |
 | 7 | Deferred, withdrawn and completed students could submit and were counted as pending. | Stakeholder understanding (30%) | Only `ENROLLED` students of the assessment's programme can submit or count as pending (§9, §19) |
 
 ---
@@ -135,6 +137,44 @@ A line-by-line re-check of the brief against the first draft of this document fo
 - Do not introduce another backend framework.
 - Avoid unnecessary infrastructure and overengineering.
 
+## 2.3 Technology Stack and Versions
+
+| Area | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router, Turbopack), React 19 |
+| Language | TypeScript, `strict: true`. No `any` in domain or service code. |
+| Database | PostgreSQL |
+| ORM | Prisma 6.12 (`prisma-client-js`), configured in `prisma.config.ts` |
+| Authentication | Auth.js — `next-auth@5.0.0-beta.32` (pinned: v5 is a beta) and `bcryptjs` (§27) |
+| Validation | Zod 4, always on the server |
+| UI | Tailwind CSS 4 and shadcn/ui (Base UI primitives, `cn` class-merging package) |
+| Dates | `date-fns` |
+| Tests | Vitest (`vitest`, `@vitejs/plugin-react`) |
+| Scripts | `tsx` (runs `prisma/seed.ts`) |
+
+Any other dependency needs a reason, recorded in PROGRESS.md.
+
+### Version notes
+
+- **Next.js 16:** `cookies()`, `headers()`, route `params` and `searchParams` are async — `await` them.
+- **Next.js 16:** middleware is now **Proxy** (`src/proxy.ts`) and runs on the Node.js runtime.
+- **Next.js 16:** `next build` does not run ESLint. Run `npm run lint` separately.
+- **Next.js 16:** uploads go through Server Actions, so set `serverActions.bodySizeLimit: "6mb"` in `next.config.ts` (files are capped at 5 MB, §32).
+- **Prisma 6.12:** `prisma.config.ts` is early access — it needs `earlyAccess: true` and has no `datasource` key; the URL comes from `env("DATABASE_URL")` in the schema. The seed command is `package.json` → `prisma.seed`.
+- **Prisma `Decimal`** values cannot cross the server → client component boundary. Convert money to strings in the service DTO (§7).
+
+## 2.4 Working Rules
+
+1. **Verify, don't assume.** Run the migration, the seed, the tests and the build, and load the page before marking anything done.
+2. **Report honestly.** Failed checks and skipped work are written down in PROGRESS.md, not left out.
+3. **No mocked data.** Every screen reads from PostgreSQL. If a screen has no data, fix the seed.
+4. **Server-side enforcement is what counts.** A rule enforced only by a disabled button or a hidden element is not implemented.
+5. **After every completed piece of work:**
+   - update [PROGRESS.md](PROGRESS.md) (checklist, verification, open items, decisions);
+   - append one line to [development_log.md](development_log.md).
+6. **Commit per logical step** with conventional commits (`feat(students): server-side search and filters`). No single giant commit.
+7. **When this document is silent,** choose the simplest option consistent with §42, then record the decision here and in the PROGRESS.md decision log.
+
 ---
 
 # 3. Domain Model
@@ -173,6 +213,8 @@ Entities:
 ---
 
 # 4. Database Schema
+
+The authoritative schema is [`prisma/schema.prisma`](../prisma/schema.prisma); migrations are in `prisma/migrations`. This section explains each model and its rules. A schema change always ships with a migration and an update to this section.
 
 ## 4.1 Programme
 
@@ -256,6 +298,17 @@ SMS-2025-0003
 Do not use the internal database ID as the business-facing Student ID.
 
 The year in the Student ID is the student's academic year at creation. The Student ID never changes afterwards, even if the academic year or programme is edited.
+
+### Race-safe generation
+
+Format `SMS-{academicYear}-{sequence padded to 4}`. Generate **inside a transaction**:
+
+1. Find the highest existing `studentId` with the prefix `SMS-{year}-`.
+2. Increment its sequence.
+3. Insert the student, plus its `StudentFee` when a tariff matches (§6A).
+4. On Prisma error `P2002` (unique violation on `studentId`), retry — up to 3 attempts.
+
+Never derive the business `studentId` from the internal `id`.
 
 ```text
 id        → internal identifier
@@ -406,7 +459,7 @@ Outstanding Balance =
 StudentFee.amount - SUM(Payments)
 ```
 
-This avoids data inconsistency.
+This avoids data inconsistency. Displayed outstanding is never below zero.
 
 Example:
 
@@ -418,6 +471,31 @@ Payment #2:          40,000 BDT
 Paid:                90,000 BDT
 Outstanding:         60,000 BDT
 ```
+
+### Money
+
+- All monetary columns are `Decimal @db.Decimal(12, 2)`.
+- All arithmetic uses `Prisma.Decimal` (`.plus()`, `.minus()`, `.gt()`, `.lte()`). **Never** convert to JavaScript `number` for arithmetic.
+- Services return DTOs with money already as strings, because `Decimal` cannot be passed to client components:
+
+```ts
+type FeeSummary = {
+  currency: string;          // "BDT"
+  totalFee: string;          // "150000.00"
+  totalPaid: string;         // "90000.00"
+  outstanding: string;       // "60000.00"
+  dueDate: Date | null;
+  isOverdue: boolean;
+  hasFeeAssigned: boolean;   // false when the student has no StudentFee
+  matchesTariff: boolean;    // false when the fee differs from the tariff for the student's current programme/year
+};
+```
+
+- Display uses one helper: `src/lib/utils/format.ts` → `formatCurrency(value, currency)`.
+
+### Transactions
+
+"Payment ≤ outstanding" is a read-then-write race. Recording a payment runs in `prisma.$transaction`: recompute the outstanding balance **inside** the transaction, validate, then insert. The same applies to assigning or adjusting a fee (compare against total paid inside the transaction). Failures return a domain error, never a raw Prisma error.
 
 ---
 
@@ -490,6 +568,8 @@ updatedAt
 - The assessment must be open (`isOpen = true`).
 - The student must be `ENROLLED` and belong to the assessment's programme.
 - Maximum file size: 5 MB.
+- File type is checked by **both** extension and MIME type (§32).
+- The replacement deadline check uses the server clock at write time.
 - Accept PDF and DOCX only.
 - Store file metadata in PostgreSQL, not binary document contents.
 - Store the actual document using the selected file-storage mechanism.
@@ -925,44 +1005,58 @@ Conventions:
 - Role and student identity come from the server-side session (§27), never from the request body or query.
 - Every request body and query is validated with Zod (§30).
 - Error body: `{ "error": string, "fieldErrors"?: Record<string, string[]> }`.
-- Status codes: `200`/`201` success · `400` validation · `403` wrong role · `404` not found · `409` conflict (duplicate email or reference, deadline passed, closed assessment).
+- Status codes: `200`/`201` success · `400` validation · `401` signed out · `403` wrong role · `404` not found · `409` conflict (duplicate email or reference, deadline passed, closed assessment).
 
 ---
 
 # 18. Application Structure
 
-Recommended project organization:
-
 ```text
+prisma/
+  schema.prisma
+  migrations/
+  seed.ts
+storage/
+  uploads/.gitkeep                  uploaded files (gitignored)
+docs/
+  architecture.md                   this specification
+  PROGRESS.md                       phase checklist, verification, decisions
+  development_log.md                one line per completed step
 src/
-├── app/
-├── components/
-│   ├── ui/
-│   ├── staff/
-│   ├── student/
-│   ├── students/
-│   ├── fees/
-│   ├── assessments/
-│   └── results/
-│
-├── lib/
-│   ├── prisma.ts
-│   ├── validations/
-│   ├── services/
-│   ├── utils/
-│   └── constants/
-│
-├── actions/
-│   ├── students.ts
-│   ├── payments.ts
-│   ├── assessments.ts
-│   ├── submissions.ts
-│   └── results.ts
-│
-└── types/
+  auth.ts                           Auth.js configuration (§27)
+  proxy.ts                          optimistic route gate (§27.3)
+  app/
+    layout.tsx                      root html/body
+    page.tsx                        redirect to the role's dashboard or /login
+    login/page.tsx
+    (staff)/staff/                  layout.tsx = requireStaff() + app shell
+      dashboard/  students/ (new, [id], [id]/edit)  fees/  assessments/ ([id])  results/
+    (student)/student/              layout.tsx = requireStudent() + app shell
+      dashboard/  fees/  assessments/  marksheet/
+    api/
+      auth/[...nextauth]/           Auth.js endpoints
+      ...                           JSON API (§17.1), files/[submissionId]
+  actions/                          Server Actions: auth, students, payments, assessments, submissions, results
+  lib/
+    prisma.ts                       Prisma client singleton
+    auth/                           session.ts (getSession, requireStaff, requireStudent), roles.ts
+    domain/                         pure business rules (§36)
+    services/                       database orchestration, returns DTOs
+    validations/                    Zod schemas (§30)
+    storage/                        FileStorage interface + local implementation (§32)
+    api/response.ts                 ActionResult → HTTP (§31)
+    utils/format.ts                 currency and date formatting
+    errors.ts                       DomainError, ActionResult
+  components/
+    ui/                             shadcn primitives
+    shared/                         status badges, empty states, money
+    staff/  student/                role-specific components
+  types/                            type augmentation (next-auth)
+tests/
+  domain/  validations/
 ```
 
-Do not create unnecessary abstraction layers. Add a service only where it makes domain/application logic clearer or reusable.
+Do not create unnecessary abstraction layers. Add a service only where it makes domain/application logic clearer or reusable. No repository pattern over Prisma and no dependency-injection container.
 
 ---
 
@@ -983,7 +1077,7 @@ Unpublished Results
 
 ### Overdue Fees
 
-Show students with:
+Columns: Student ID, name, programme, outstanding, days overdue. Show students with:
 
 ```text
 outstandingBalance > 0
@@ -1026,6 +1120,11 @@ Features:
 
 Required search/filter behavior comes directly from the assessment.
 
+- Search and filters run **on the server**, driven by `searchParams` — never by filtering an array in the browser.
+- List columns: Student ID · Name · Programme · Year · Status · actions.
+- Student detail page has tabs: Details / Fees / Submissions / Results.
+- Inactive programmes are excluded from the create-form programme list.
+
 ---
 
 # 21. Staff — Fees
@@ -1058,6 +1157,13 @@ payment when no fee is assigned
 fee adjusted below the amount already paid
 ```
 
+UI:
+
+- "Record Payment" dialog: amount, payment date, reference number. Disabled when the student is fully paid or has no fee.
+- "Assign / Adjust Fee" dialog: default from the programme tariff, or a manual amount and due date.
+- When the assigned fee no longer matches the tariff, show "Fee does not match programme tariff" with a "Reassign from tariff" action.
+- A programme tariff management screen is optional; the seed covers tariffs.
+
 ---
 
 # 22. Staff — Assessments
@@ -1070,7 +1176,9 @@ Features:
 - View submissions
 - See submission status
 - See late submission indicator
-- The submission list covers ENROLLED students of the assessment's programme: Submitted / Late / Pending
+- The submission list covers ENROLLED students of the assessment's programme: Submitted / Late / Pending, with a download link and inline grade entry
+- The list shows submission count and graded count per assessment
+- Opening or closing an assessment asks for confirmation
 
 Assessment fields:
 
@@ -1098,6 +1206,8 @@ Features:
 - Withhold result
 - Publish or withhold a student's whole marksheet
 - Warning before publishing for a student with an overdue balance
+- Publishing and withholding ask for confirmation
+- Classification updates live as the grade is typed; the server recalculates it
 
 Example:
 
@@ -1115,7 +1225,7 @@ Classification: Distinction
 
 # 24. Student View
 
-The Student view should demonstrate the student's complete journey.
+The Student view should demonstrate the student's complete journey. **Every screen takes the student from the session (§27), never from the URL.**
 
 ## Dashboard
 
@@ -1140,6 +1250,8 @@ Outstanding Balance
 Payment History
 Overdue Status
 ```
+
+When no fee is assigned, show "No fee assigned" instead of a zero balance.
 
 ## Assessments
 
@@ -1167,7 +1279,7 @@ Grade
 Classification
 ```
 
-Unpublished results must not appear.
+Unpublished results must not appear, and must not be in the data sent to the browser. The filter is in the **database query** (`where: { published: true }`), not a React condition.
 
 ---
 
@@ -1236,6 +1348,68 @@ The assessment places significant weight on feature intuition and edge cases. Tr
 - Non-integer grade.
 - Publishing results for a student with an overdue balance (warning, not blocked).
 - New grade added after a marksheet was published (starts unpublished).
+
+## 25.1 Expected Messages
+
+Every case produces a clear, user-facing result — never a crash, never a raw database error.
+
+**Student**
+
+| Case | Expected |
+|---|---|
+| Duplicate Student ID | Impossible by construction: unique constraint + retry (§4.2) |
+| Duplicate email | "A student with this email already exists." |
+| Invalid email format | Field error |
+| Missing required field | Field error |
+| Date of birth in the future | "Date of birth must be in the past." |
+| Date of birth implying age under 15 | "Student must be at least 15 years old." |
+| Academic year outside `2000 … currentYear + 1` | Field error |
+| Search returns nothing | Empty state: "No students match your search." |
+| Inactive programme | Not offered in the create form |
+
+**Fees**
+
+| Case | Expected |
+|---|---|
+| Payment ≤ 0 | "Payment amount must be greater than zero." |
+| Payment > outstanding | "Payment exceeds the outstanding balance of X." |
+| Duplicate reference number | "This payment reference already exists." |
+| Future payment date | "Payment date cannot be in the future." |
+| No payment history | Empty state |
+| Fully paid student | `Paid` badge; payment form disabled |
+| No fee assigned | "No fee has been assigned to this student."; payment blocked |
+| Fee set to ≤ 0 or below total paid | "Fee cannot be less than the amount already paid (X)." |
+| Tariff edited after enrolment | Existing assigned fees unchanged |
+| Student's programme or year edited | Fee unchanged; "does not match tariff" notice with reassign action |
+
+**Assessment / Submission**
+
+| Case | Expected |
+|---|---|
+| Missing title, module or programme | Field error |
+| Deadline in the past on create | Allowed, with a warning |
+| File is not PDF or DOCX | "Only PDF and DOCX files are accepted." |
+| File larger than 5 MB | "File must be smaller than 5 MB." |
+| Submitted before or exactly at the deadline | Accepted, `isLate: false` |
+| Submitted after the deadline (open assessment) | Accepted, `isLate: true`, flagged in the staff UI |
+| Resubmission before or exactly at the deadline | Replaces the record, recalculates `isLate`, deletes the old file |
+| Resubmission after the deadline | "The deadline has passed. Your existing submission can no longer be replaced." |
+| Closed assessment | "This assessment is closed for submissions." |
+| Student not ENROLLED | "Only enrolled students can submit." |
+| Another programme's assessment | Not found |
+
+**Results**
+
+| Case | Expected |
+|---|---|
+| Grade below 0 or above 100 | "Grade must be between 0 and 100." |
+| Non-integer grade | Rejected |
+| Grade exactly 40 / 60 / 70 | Pass / Merit / Distinction |
+| Existing result re-graded | Row updated, never duplicated |
+| Student outside the assessment's programme | "This student is not in the assessment's programme." |
+| Student requests an unpublished result | Not returned by the query |
+| Publishing for a student with an overdue balance | Confirmation shows the overdue amount; not blocked |
+| New grade after a marksheet was published | Saved unpublished |
 
 ---
 
@@ -1375,6 +1549,8 @@ Rules:
 | Pages, Server Actions, API routes | each file | Call `requireStaff()` / `requireStudent()` / `getSession()` themselves. Layouts and pages render in parallel, so a layout check alone is not enough. |
 | Queries | services | A student's data is looked up by `session.studentId`, never by a URL, form or body value |
 
+API routes answer `401` when signed out and `403` for the wrong role, instead of redirecting.
+
 The proxy is a convenience, not the security boundary (Next.js docs: Proxy is for optimistic checks only).
 
 ## 27.4 Routes
@@ -1400,40 +1576,74 @@ The login page lists them only when `DEMO_MODE="true"`.
 
 ## 27.6 Out of scope
 
-Registration, password reset, email verification, OAuth / SSO, account lockout and rate limiting, and staff sub-roles. Staff creating a login when enrolling a student is planned for the student service (Phase 2).
+Registration, password reset, email verification, OAuth / SSO, account lockout and rate limiting, and staff sub-roles. Staff creating a login when enrolling a student is planned for the student service (Phase 3, §41).
 
 ---
 
 # 28. Seed Data
 
-The seed script must contain at least:
+`prisma/seed.ts`, run with `npm run db:seed` (also runs after `prisma migrate reset`).
 
-- 2 programmes
-- 5 students
-- Programme fees
-- Payment transactions
-- Assessments
-- Submissions
-- Sample grades
-- Both published and unpublished results
-- At least one overdue student
-- At least one late submission
-- An assigned fee (`StudentFee`) for every student
-- Assessments for both programmes
-- At least one closed assessment
-- At least one pending (missing) submission
+Rules:
 
-Recommended demo scenarios:
+- **Idempotent:** every write is an `upsert` on a unique key, so re-running is safe.
+- **Dates are relative to the time the seed runs.** Fixed calendar dates would make every fee overdue when the evaluator runs it later.
+- The seed must include at least: 2 programmes, 5 students, fees, payments, assessments, submissions, sample grades, published and unpublished results, an overdue student, a late submission, a pending submission, a closed assessment, and an assigned fee for every student.
 
-```text
-Student 1 → fully paid
-Student 2 → partially paid
-Student 3 → overdue
-Student 4 → no payment
-Student 5 → different programme
-```
+Let `Y` = current year and `now` = the time the seed runs.
 
-This ensures the evaluator can immediately see the important workflows and edge cases.
+**Programmes and tariffs**
+
+| Code | Name | Tariff (year Y) | Due date | Purpose |
+|---|---|---|---|---|
+| `BSC-CS` | BSc Computer Science | 150,000.00 BDT | `now − 30d` | overdue scenario |
+| `MBA` | Master of Business Administration | 250,000.00 BDT | `now + 60d` | outstanding but not overdue |
+
+**Students** — IDs `SMS-{Y}-0001` … `SMS-{Y}-0006`, each with a `StudentFee` copied from the tariff and a login (§27.5)
+
+| # | Name | Programme | Status | Payments | Demonstrates |
+|---|---|---|---|---|---|
+| 1 | Nusrat Jahan | BSC-CS | ENROLLED | 150,000 (full) | fully paid |
+| 2 | Rahim Uddin | BSC-CS | ENROLLED | 50,000 + 40,000 | partially paid, **overdue** — default demo student |
+| 3 | Abir Hossain | BSC-CS | ENROLLED | none | **overdue**, no payment history (sorts first by name) |
+| 4 | Tanvir Ahmed | BSC-CS | DEFERRED | 75,000 | deferred status |
+| 5 | Farhana Akter | MBA | ENROLLED | 100,000 | outstanding but **not** overdue |
+| 6 | Sadia Islam | MBA | COMPLETED | 250,000 (full) | completed status |
+
+Payment reference numbers: `PAY-{Y}-0001`, `PAY-{Y}-0002`, …
+
+**Assessments**
+
+| Title | Programme | Module | Deadline | Open |
+|---|---|---|---|---|
+| Database Systems Coursework | BSC-CS | Database Systems | `now − 14d` | yes — late submissions still accepted |
+| Algorithms Assignment 1 | BSC-CS | Algorithms | `now + 10d` | yes |
+| Business Strategy Report | MBA | Strategy | `now + 21d` | yes |
+| Financial Accounting Essay | MBA | Financial Accounting | `now − 45d` | **no** (closed) |
+
+**Submissions** — real, minimal valid PDF files written to `storage/uploads/` so downloads work
+
+- Student 1 → Database Systems, `deadline − 3d`, on time
+- Student 2 → Database Systems, `deadline + 2d`, **late**
+- Student 4 → Database Systems, `deadline − 1h`, on time (made before the deferral)
+- Student 3 → Database Systems, **none** (pending)
+- Student 1 → Algorithms, on time
+- Student 5 → Business Strategy, on time
+- Student 6 → Financial Accounting, `deadline − 5d`, on time (closed assessment)
+
+**Results** — every classification boundary, published and withheld
+
+| Student | Assessment | Grade | Classification | Published |
+|---|---|---|---|---|
+| 1 | Database Systems | 78 | Distinction | yes |
+| 2 | Database Systems | 70 | Distinction (boundary) | yes |
+| 4 | Database Systems | 60 | Merit (boundary) | yes |
+| 3 | Database Systems | 40 | Pass (boundary) | **no** |
+| 5 | Business Strategy | 35 | Fail | **no** |
+| 1 | Algorithms | 82 | Distinction | **no** |
+| 6 | Financial Accounting | 65 | Merit | yes |
+
+**Accounts** — 1 staff login and 1 login per student; password `Password123!` (§27.5).
 
 ---
 
@@ -1503,8 +1713,23 @@ Validate:
 - Submission metadata
 - Grade entry
 - Search/filter parameters
+- Sign-in
 
 Validation should exist on the server even if client-side validation is also provided.
+
+Field rules:
+
+| Field | Rule |
+|---|---|
+| Email | Valid format; trimmed and stored lower-case |
+| Date of birth | In the past; student at least 15 years old |
+| Academic year | Integer, `2000 … currentYear + 1` |
+| Payment amount | Greater than 0, at most 2 decimal places |
+| Payment date | Not in the future |
+| Grade | Integer, `0 … 100` |
+| File | PDF or DOCX by extension **and** MIME type; at most 5 MB |
+
+Zod schemas live in `src/lib/validations/`.
 
 ---
 
@@ -1537,11 +1762,27 @@ This result is not published.
 
 Avoid exposing raw database errors to users.
 
+### Action result shape
+
+Every Server Action returns a result instead of throwing to the client:
+
+```ts
+type ActionResult<T = void> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; code: ErrorCode; fieldErrors?: Record<string, string[]> };
+
+type ErrorCode = "VALIDATION" | "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL";
+```
+
+- Services catch Prisma errors and map them to human messages (`src/lib/errors.ts`).
+- `src/lib/api/response.ts` maps the same result to HTTP for the JSON API: `VALIDATION` → 400, `UNAUTHORIZED` → 401, `FORBIDDEN` → 403, `NOT_FOUND` → 404, `CONFLICT` → 409, `INTERNAL` → 500 with a generic message (§17.1).
+- Every successful mutation shows toast feedback.
+
 ---
 
 # 32. File Upload Strategy
 
-The database should store metadata only:
+The database stores metadata only:
 
 ```text
 fileName
@@ -1550,11 +1791,38 @@ fileType
 fileSize
 ```
 
-Do not store document binaries directly in PostgreSQL.
+Do not store document binaries in PostgreSQL.
 
-The storage implementation should be isolated behind a small storage utility/service so it can be changed without changing the Submission domain.
+### Storage
 
-For the assessment, prioritize a reliable and easy-to-demonstrate implementation over a complex storage architecture.
+- Files are written to `storage/uploads/` at the repository root. The folder is gitignored except for a `.gitkeep`.
+- It is **outside** `public/`, so files are never served statically.
+- All file-system access goes through `src/lib/storage/index.ts`. **No `fs` calls anywhere else.**
+
+```ts
+export interface FileStorage {
+  save(file: File, key: string): Promise<{ url: string; size: number }>;
+  read(key: string): Promise<Buffer>;
+  delete(key: string): Promise<void>;
+}
+```
+
+- `LocalFileStorage` implements it. Swapping to S3 or Vercel Blob means writing another implementation only.
+- Stored key: `${submissionId}${ext}`. The original name stays in `fileName` and is used in the `Content-Disposition` header.
+
+### Download
+
+- `GET /api/files/[submissionId]` looks the submission up by id, checks the session (staff, or the student who owns it), and streams the file.
+- **Never accept a file-system path from the client** (path traversal).
+
+### Accepted files
+
+- Extensions `.pdf`, `.docx` **and** MIME types `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+- At most 5 MB.
+
+### Limitation
+
+Local disk does not persist on serverless hosts such as Vercel. The README must say so.
 
 ---
 
@@ -1635,94 +1903,83 @@ Do not rely only on color. Include text/status labels for accessibility and clar
 
 # 36. Testing Strategy
 
-At minimum, test critical business rules.
+Vitest. Run with `npm test`. Business rules are written as pure functions in `src/lib/domain/` (no database access) so they can be unit-tested:
 
-## Unit-level logic
+```ts
+// src/lib/domain/fees.ts
+calculateOutstanding(totalFee: Decimal, payments: Decimal[]): Decimal
+isOverdue(outstanding: Decimal, dueDate: Date | null, now: Date): boolean
+isValidFeeAmount(amount: Decimal, totalPaid: Decimal): boolean
 
-Test:
+// src/lib/domain/results.ts
+calculateClassification(grade: number): "Distinction" | "Merit" | "Pass" | "Fail"
 
-```text
-calculateOutstandingBalance()
-calculateClassification()
-isSubmissionLate()
-canReplaceSubmission()
-isValidFeeAmount()
+// src/lib/domain/submissions.ts
+isSubmissionLate(submittedAt: Date, deadline: Date): boolean
+canReplaceSubmission(now: Date, deadline: Date): boolean
+
+// src/lib/domain/student-id.ts
+formatStudentId(year: number, sequence: number): string   // SMS-2026-0001
+parseStudentIdSequence(studentId: string): number
 ```
 
-## Validation
-
-Test:
+Exact semantics:
 
 ```text
-grade 0
-grade 40
-grade 60
-grade 70
-grade 100
-grade -1
-grade 101
+outstanding     = totalFee - sum(payments)
+isOverdue       = outstanding > 0 AND now > dueDate      (strictly greater)
+isLate          = submittedAt > deadline                 (exactly at the deadline is on time)
+canReplace      = now <= deadline                        (exactly at the deadline may still replace)
+feeValid        = amount > 0 AND amount >= totalPaid
+classification  = grade >= 70 Distinction · >= 60 Merit · >= 40 Pass · otherwise Fail
 ```
 
-## Payment
+## Required unit tests
 
-Test:
+| Function | Cases |
+|---|---|
+| `calculateOutstanding` | no payments, partial, exact, overpayment guard |
+| `isOverdue` | nothing outstanding and past due; outstanding before due; outstanding after due; exactly at due date |
+| `calculateClassification` | 0, 39, 40, 59, 60, 69, 70, 100 |
+| `isSubmissionLate` | before, exactly at, after the deadline |
+| `canReplaceSubmission` | before, exactly at, after the deadline |
+| `isValidFeeAmount` | zero, below paid, equal to paid, above paid |
+| `formatStudentId` | padding; sequence 9 → 10 → 100 |
 
-```text
-valid payment
-zero payment
-negative payment
-payment > outstanding
-duplicate reference
-payment with no assigned fee
-fee adjusted below amount paid
-```
+## Required validation tests
 
-## Results
+- Grade: `-1`, `0`, `40`, `60`, `70`, `100`, `101`, `70.5`
+- Payment: `0`, `-100`, valid amount, future date
+- Email: valid, invalid
+- Date of birth: future, under 15
 
-Test:
+## End-to-end checks
 
-```text
-published result visible
-unpublished result invisible
-```
-
-## Submission
-
-Test:
-
-```text
-PDF accepted
-DOCX accepted
-unsupported file rejected
-late submission flagged
-resubmission before deadline allowed
-resubmission after deadline rejected
-submission to closed assessment rejected
-```
+Access rules (published results only, own data only, role areas) are checked against a running build and recorded in PROGRESS.md. Service-level integration tests against a test database are optional and never replace the unit tests.
 
 ---
 
 # 37. README Requirements
 
-The final README should contain:
+The final README should contain, in this order:
 
 ```text
-1. Project Overview
-2. Features
-3. Architecture
-4. Technology Stack
-5. Prerequisites
-6. Environment Variables
-7. Local Setup
-8. Database Setup
-9. Prisma Migration
-10. Seed Data
-11. Demo Credentials and Sign-in
-12. Business Rules
-13. Edge Cases
-14. AI Usage
-15. Design Decisions
-16. Known Limitations
+1.  Project Overview
+2.  Features — staff and student, separately
+3.  Architecture — layer diagram, ERD, JSON API route table with curl examples
+4.  Technology Stack
+5.  Prerequisites
+6.  Environment Variables — every variable, with a description
+7.  Local Setup — copy-pasteable, from clone to running app
+8.  Database Setup and Migration
+9.  Seed Data — what it creates and which scenario each student demonstrates
+10. Demo Accounts and Sign-in — logins, shared demo password, DEMO_MODE
+11. Business Rules — the formulas, stated plainly
+12. Design Decisions — every "Product Decision" in this document, with its rationale
+13. Edge Cases Handled
+14. Testing — how to run, what is covered
+15. AI Usage — tools, what they were used for, and that all output was reviewed, tested and adapted
+16. Known Limitations — local file storage on serverless hosts, no registration / password reset / rate limiting, no submission version history, no partial-payment schedule
 ```
 
 The assessment explicitly requires local setup instructions, `.env` variables, and a short explanation of AI usage.
@@ -1778,6 +2035,11 @@ Avoid:
 - Complex notification infrastructure.
 - Enterprise workflow engine.
 - AI chatbot unrelated to the required Registry workflows.
+- GraphQL or tRPC.
+- Email or notification infrastructure.
+- Dark mode, animation libraries, i18n, or a custom design system.
+- A repository pattern over Prisma or a dependency-injection container.
+- API routes that re-implement business logic instead of calling the service layer, or routes beyond §17.1.
 
 The assessment explicitly states that this is not a full platform.
 
@@ -1823,6 +2085,12 @@ The application is considered complete when:
 - [ ] Staff can publish/withhold results per result and per student.
 - [ ] Students only see published results.
 
+### Authentication
+
+- [x] Staff and students sign in with email and password.
+- [x] Staff and student areas are enforced on the server.
+- [x] Students only see their own data.
+
 ### Engineering
 
 - [ ] PostgreSQL is used.
@@ -1841,86 +2109,41 @@ The application is considered complete when:
 
 # 41. Implementation Sequence
 
-Do not start by building every UI screen.
-
-Follow this sequence:
+Do not start by building every UI screen. Finish and verify each phase before the next. Live status for every item is in [PROGRESS.md](PROGRESS.md).
 
 ```text
 PHASE 1 — Foundation
-    ↓
-Next.js project
-    ↓
-PostgreSQL connection
-    ↓
-Prisma setup
-    ↓
-Final schema
-    ↓
-Migration
-    ↓
-Seed data
+    Next.js project → PostgreSQL connection → Prisma setup → final schema → migration
+    → seed (programmes, tariffs, students, fees)
+    Verify: migrate status up to date; tables visible in Prisma Studio; seed runs twice
 
-PHASE 2 — Domain Logic
-    ↓
-Student service
-    ↓
-Fee/payment logic
-    ↓
-Assessment logic
-    ↓
-Submission logic
-    ↓
-Result logic
-    ↓
-JSON API route handlers
+PHASE 2 — Authentication (§27)
+    User model + migration → Auth.js sign-in → session helpers → proxy
+    → login page → role-guarded layouts → minimal dashboards → demo accounts in seed
+    Verify: both roles sign in; wrong role and signed-out requests are redirected; build passes
 
-PHASE 3 — Staff UI
-    ↓
-Dashboard
-    ↓
-Students
-    ↓
-Fees
-    ↓
-Assessments
-    ↓
-Results
+PHASE 3 — Domain Logic and API
+    Pure domain functions + unit tests (§36) → Zod schemas (§30)
+    → services: student (race-safe ID, fee assignment), fee/payment (transactional),
+      assessment, submission (storage §32), result
+    → Server Actions → JSON API route handlers (§17.1)
+    → complete seed: payments, assessments, submissions with files, results (§28)
+    Verify: npm test passes; every API route checked with curl; seed from a clean database
 
-PHASE 4 — Student UI
-    ↓
-Dashboard
-    ↓
-Fees
-    ↓
-Assessments
-    ↓
-Marksheet
+PHASE 4 — Staff UI
+    Dashboard → Students → Fees → Assessments → Results
 
-PHASE 5 — Quality
-    ↓
-Validation
-    ↓
-Edge cases
-    ↓
-Error handling
-    ↓
-Loading/empty states
-    ↓
-Responsive UI
-    ↓
-Testing
+PHASE 5 — Student UI
+    Dashboard → Fees → Assessments → Marksheet
 
-PHASE 6 — Submission
-    ↓
-README
-    ↓
-AI usage documentation
-    ↓
-Seed verification
-    ↓
-Clean Git history
-    ↓
-Final walkthrough
+PHASE 6 — Quality
+    Edge cases (§25.1) → error boundaries per route group → loading and empty states
+    → confirmation dialogs → toasts → responsive at 375 / 768 / 1280 px
+    → consistent currency and date formatting → lint clean
+
+PHASE 7 — Submission
+    README (§37) → AI usage → .env.example accurate → seed verified from clean
+    → npm run build clean → clean Git history → final walkthrough
 ```
 
 ---

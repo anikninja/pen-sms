@@ -2,7 +2,7 @@
  * Demo data. Idempotent: every write is an upsert on a unique key, so it can be re-run safely.
  *
  * Current scope: programmes, fee tariffs, students with assigned fees, and login accounts.
- * Payments, assessments, submissions and results are added in Phase 1 (docs/prompt.md §8).
+ * Payments, assessments, submissions and results are added in Phase 3 (docs/architecture.md §28, §41).
  *
  * Dates are relative to "now" so the overdue / not-yet-due scenarios stay true whenever it runs.
  */
@@ -33,7 +33,7 @@ const PROGRAMMES = [
   },
 ] as const
 
-// # matches docs/prompt.md §8. Abir Hossain (student 3, overdue with no payments) sorts first by name.
+// # matches docs/architecture.md §28. Abir Hossain (student 3, overdue with no payments) sorts first by name.
 const STUDENTS: {
   seq: number
   fullName: string
