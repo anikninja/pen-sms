@@ -29,3 +29,10 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 24. Phase 3 verified - 99 unit tests, 106 API end-to-end checks, seed reset twice, build passes
 25. Fix: next.config body size limit moved under experimental.serverActions (docs had the wrong key)
 26. Fix: concurrent enrolments - advisory lock per year for Student ID generation (CI caught a failure under 5 simultaneous requests)
+27. Staff UI foundations - shadcn dialog, alert-dialog, native-select; status badges, empty state, confirm dialog, toasts, staff navigation
+28. Staff dashboard - six Registry figures and overdue fees table from live data
+29. Staff students - server-side search and filters, create and edit forms, detail page with Details / Fees / Submissions / Results tabs
+30. Staff fees - fees list by status, record payment and assign / adjust fee dialogs, reassign from tariff
+31. Staff assessments and results - create / edit / open / close, grading table with live classification, publish and withhold per result, per student and per assessment with overdue warning
+32. Fix: fee due dates are calendar days - overdue starts the day after the due date in Dhaka; seeded tariff due dates made calendar dates
+33. Phase 4 verified - 14 staff flows in headless Chrome with no console errors, 111 unit tests, 106 API checks, build passes

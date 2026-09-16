@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { EnrolmentStatusBadge } from "@/components/shared/enrolment-status-badge"
+import { EnrolmentStatusBadge } from "@/components/shared/status-badges"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireStudent } from "@/lib/auth/session"
 import { prisma } from "@/lib/prisma"

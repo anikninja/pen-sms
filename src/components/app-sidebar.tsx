@@ -2,7 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { GraduationCapIcon, LayoutDashboardIcon } from "lucide-react"
+import {
+  ClipboardListIcon,
+  GraduationCapIcon,
+  LayoutDashboardIcon,
+  ReceiptIcon,
+  TrophyIcon,
+  UsersIcon,
+} from "lucide-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -19,7 +26,13 @@ import { ROLE_HOME, type AppRole } from "@/lib/auth/roles"
 
 // Each build phase adds its screens here (docs/PROGRESS.md).
 const NAV: Record<AppRole, NavItem[]> = {
-  STAFF: [{ title: "Dashboard", url: "/staff/dashboard", icon: <LayoutDashboardIcon /> }],
+  STAFF: [
+    { title: "Dashboard", url: "/staff/dashboard", icon: <LayoutDashboardIcon /> },
+    { title: "Students", url: "/staff/students", icon: <UsersIcon /> },
+    { title: "Fees", url: "/staff/fees", icon: <ReceiptIcon /> },
+    { title: "Assessments", url: "/staff/assessments", icon: <ClipboardListIcon /> },
+    { title: "Results", url: "/staff/results", icon: <TrophyIcon /> },
+  ],
   STUDENT: [{ title: "Dashboard", url: "/student/dashboard", icon: <LayoutDashboardIcon /> }],
 }
 

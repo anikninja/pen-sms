@@ -23,7 +23,7 @@ const HOUR = 60 * 60 * 1000
 const now = new Date()
 const YEAR = now.getFullYear()
 const daysFromNow = (days: number) => new Date(now.getTime() + days * DAY)
-/** A calendar date N days ago in the Registry time zone, stored as UTC midnight. */
+/** A calendar date N days ago (negative = ahead) in the Registry time zone, stored as UTC midnight. Fee due dates are calendar dates. */
 const calendarDaysAgo = (days: number) => isoDateToUtc(registryToday(daysFromNow(-days)))
 
 type ProgrammeCode = "BSC-CS" | "MBA"
@@ -33,13 +33,13 @@ const PROGRAMMES: { code: ProgrammeCode; name: string; description: string; fee:
     code: "BSC-CS",
     name: "BSc Computer Science",
     description: "Four-year undergraduate programme in computer science.",
-    fee: { amount: "150000.00", dueDate: daysFromNow(-30) }, // past due → overdue scenario
+    fee: { amount: "150000.00", dueDate: calendarDaysAgo(30) }, // past due → overdue scenario
   },
   {
     code: "MBA",
     name: "Master of Business Administration",
     description: "Two-year postgraduate business programme.",
-    fee: { amount: "250000.00", dueDate: daysFromNow(60) }, // not yet due
+    fee: { amount: "250000.00", dueDate: calendarDaysAgo(-60) }, // not yet due
   },
 ]
 

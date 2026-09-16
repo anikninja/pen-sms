@@ -378,7 +378,7 @@ The assessment requires overdue balances but does not specify a detailed payment
 For this MVP:
 
 ```text
-overdue = today > studentFee.dueDate AND outstandingBalance > 0
+overdue = today (Dhaka) > studentFee.dueDate AND outstandingBalance > 0
 ```
 
 Document this as an explicit product decision in the README.
@@ -1062,8 +1062,9 @@ src/
     errors.ts                       DomainError, ActionResult
   components/
     ui/                             shadcn primitives
-    shared/                         status badges, empty states, money
-    staff/  student/                role-specific components
+    shared/                         status badges, empty state, page header, confirm dialog, useServerAction
+    staff/                          student form, fee dialogs, grade table, result publish controls, URL tabs
+    student/                        student-portal components
   types/                            type augmentation (next-auth)
 tests/
   domain/  validations/  storage/  actions/
@@ -1468,8 +1469,11 @@ tariff changes never modify existing studentFee rows
 ```text
 outstanding > 0
 AND
-today > dueDate
+today (Dhaka calendar) > dueDate
+daysOverdue = calendar days after dueDate
 ```
+
+A due date is the last day to pay: a fee due on 30 Sep is not overdue at any time on 30 Sep and is 1 day overdue on 1 Oct (implemented by comparing against the end of the due day in Dhaka, `endOfRegistryDay`).
 
 ## Submission
 
@@ -1742,7 +1746,7 @@ Field rules:
 | Payment date | Not in the future |
 | Payment reference | Letters, numbers, `- _ /`; stored upper-case, so uniqueness ignores case |
 | Grade | Integer, `0 … 100` |
-| Assessment deadline | ISO 8601 date-time **with** a time zone, e.g. `2026-09-30T23:59:00+06:00` |
+| Assessment deadline | ISO 8601 date-time **with** a time zone, e.g. `2026-09-30T23:59:00+06:00`. The staff form uses `datetime-local`, entered in Dhaka time and converted in the browser (`src/lib/utils/datetime.ts`) |
 | File | PDF or DOCX by extension **and** MIME type; at most 5 MB; not empty |
 
 Calendar dates (date of birth, payment date, fee due date) are `YYYY-MM-DD`, compared in the Registry time zone **Asia/Dhaka** and stored as UTC midnight. "Today" therefore means today in Dhaka, not in UTC.

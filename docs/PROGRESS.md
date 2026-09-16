@@ -10,7 +10,7 @@ specification. One-line history: [development_log.md](development_log.md).
 | 1 — Foundation | ✅ Done |
 | 2 — Authentication | ✅ Done |
 | 3 — Domain Logic and API | ✅ Done |
-| 4 — Staff UI | 🟡 App shell + basic dashboard only |
+| 4 — Staff UI | ✅ Done |
 | 5 — Student UI | 🟡 App shell + basic dashboard only |
 | 6 — Quality | ⬜ Not started |
 | 7 — Submission | ⬜ Not started |
@@ -149,11 +149,57 @@ Afterwards the database was reset and re-seeded, and test uploads were removed (
 
 ---
 
-## Phase 4 — Staff UI 🟡
+## Phase 4 — Staff UI ✅
 
-- [x] App shell (sidebar, user menu, sign out)
-- [ ] Dashboard: all six cards (§19) + overdue fees table
-- [ ] Students · Fees · Assessments · Results
+Spec: architecture.md §19–§23, §34, §35.
+
+- [x] **Dashboard** (`/staff/dashboard`) — Total Students, Enrolled Students, Total Outstanding (exact, per currency), Overdue Students, Pending Submissions, Unpublished Results; each card links to the matching list. Overdue Fees table: Student ID, name, programme, status, outstanding, due date, days overdue.
+- [x] **Students** (`/staff/students`) — server-side search (name / Student ID) and filters (programme, status) through a plain GET form; result count; empty state "No students match your search."
+- [x] **New / edit student** — validation errors under each field; optional initial password creates a login; inactive programmes hidden on create; Student ID shown read-only on edit.
+- [x] **Student detail** (`/staff/students/[id]`) — tabs Details / Fees / Submissions / Results, kept in `?tab=`.
+  - Fees: fee, paid, outstanding, due date, status badge, days overdue, source; Record Payment dialog (disabled when paid or no fee); Assign / Adjust Fee dialog (tariff or manual); "Fee does not match programme tariff" notice with Reassign from tariff; payment history.
+  - Submissions: status, submitted time, file download.
+  - Results: publish / withhold per result and whole marksheet, with the overdue-balance warning.
+- [x] **Fees** (`/staff/fees`) — every student's fee position, filter by Overdue / Outstanding / Paid / No fee with counts, outstanding total for the view.
+- [x] **Assessments** (`/staff/assessments`) — list with programme filter, Open/Closed badge, submitted and graded counts; New assessment dialog (deadline entered in Dhaka time).
+- [x] **Assessment detail** (`/staff/assessments/[id]`) — deadline / submitted / pending / graded / withheld figures; edit dialog; close / reopen with confirmation; grading table: Submitted / Late / Pending, download, inline grade with live classification, publish / withhold per student; publish all / withhold all with a count of overdue students.
+- [x] **Results** (`/staff/results`) — assessment picker (shows withheld counts, defaults to the first assessment with withheld results) + the same grading table and bulk controls.
+- [x] Shared UI: status badges with text labels (§35), empty states, page header, confirmation dialog, toasts on every mutation, `useServerAction` hook.
+- [x] New read models: `listFeeOverview`, `totalOutstandingByCurrency`, `countPendingSubmissions`, `getStaffDashboard`, `getGradingRows`, `getTariffForStudent`.
+
+### Verified — 2026-09-17
+
+**Real browser** — headless Chrome driven over the DevTools protocol against `next build` + `next start`, signing in through the login form and clicking the real controls: **14 of 14 flows passed with no console errors, exceptions or hydration warnings** (a 15th step checked the 404 page; the only log was the expected 404 status).
+
+| Flow | Checked |
+|---|---|
+| Sign in | login form → redirect to `/staff/dashboard` |
+| Dashboard | 6 students, 435,000.00 BDT outstanding, 3 overdue, 3 pending, 3 unpublished; overdue table 30 days |
+| Students | search "rahim" → only Rahim; MBA + Enrolled → Farhana only; no match → empty state |
+| Create student | invalid email and under-15 DOB show field errors; then created → redirected to detail with new Student ID, tariff fee, overdue |
+| Record payment | 70,000 → "Payment exceeds the outstanding balance of 60,000.00 BDT." in the dialog; 10,000 → dialog closes, balance 50,000.00, reference in history |
+| Adjust fee | manual 120,000 → mismatch notice; Reassign from tariff (confirm) → back to 150,000 |
+| Marksheet | withhold → Withheld; publish confirm shows the overdue-balance warning → published |
+| Fees list | Overdue filter shows Abir, not Nusrat |
+| New assessment | deadline `2030-01-15T23:59` (Dhaka) → shown as 15 Jan 2030, 23:59; stored as 17:59 UTC |
+| Grading | 101 → inline error; 72 → "Distinction" live → saved (DB grade 72) |
+| Close assessment | confirm → "Reopen submissions" shown |
+| Results bulk publish | confirm shows overdue warning → 0 withheld |
+| Unknown student id | 404 page |
+| 375px width | students list: no horizontal page scroll (table scrolls in its container) |
+
+Screenshots were reviewed for layout; one issue found and fixed (stray scrollbar on the student tabs).
+
+**Regression:** `npm test` **111 passed** (9 files; +12 for date-time conversion and calendar due dates) · API end-to-end **106 passed, 0 failed** on a fresh seed · `tsc` clean · `npm run build` passes (9 staff routes) · ESLint: only the pre-existing `use-mobile.ts` error.
+
+Server Actions are now bundled (pages import them) and were exercised over HTTP by the browser flows above — closing the Phase 3 open item.
+
+### Fix found while building this phase: calendar due dates
+
+- **Problem:** due dates are calendar days stored as UTC midnight, but overdue was `now > dueDate`. A student paying **on** the due date was already "overdue" from 06:00 Dhaka time. The seed also stored tariff due dates with a time of day, so they could display a day off.
+- **Fix:** overdue compares against the end of the due day in Dhaka (`endOfRegistryDay`), and days overdue counts calendar days after the due date (`calendarDaysPast`) — 1 Oct is 1 day overdue for a 30 Sep due date. Seeded tariff due dates are calendar dates. Unit-tested; architecture.md §6 and §26 updated.
+
+---
 
 ## Phase 5 — Student UI 🟡
 
@@ -170,9 +216,10 @@ Afterwards the database was reset and re-seeded, and test uploads were removed (
 ## Open items
 
 - `src/hooks/use-mobile.ts` (shadcn-generated) fails the `react-hooks/set-state-in-effect` lint rule. Doesn't block the build; fix with `useSyncExternalStore` (Phase 6).
-- Server Actions still need a real HTTP check once Phase 4 screens import them.
 - Student list has no pagination (fine for the demo data size).
-- Deadlines in the JSON API must include a time zone. The Phase 4 form must convert the browser's `datetime-local` value (treated as Dhaka time) before calling the action.
+- Deadlines in the JSON API must include a time zone (the staff form converts `datetime-local` as Dhaka time).
+- Loading states (`loading.tsx`) and error boundaries per route group are not added yet (Phase 6).
+- The staff UI was checked in headless Chrome, not by hand in a desktop browser; keyboard-only navigation of dialogs is untested.
 - Seed assumes a fresh database for submissions: if a student replaced a seeded file through the app, re-seeding points the row back at the seed file and leaves the uploaded file orphaned.
 
 ---
