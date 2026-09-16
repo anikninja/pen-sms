@@ -1,7 +1,9 @@
 import { z } from "zod"
 
+import { emailSchema } from "@/lib/validations/common"
+
 export const loginSchema = z.object({
-  email: z.email("Enter a valid email address.").trim().toLowerCase(),
+  email: emailSchema,
   password: z.string().min(1, "Enter your password."),
 })
 

@@ -148,8 +148,8 @@ A line-by-line re-check of the brief against the first draft of this document fo
 | Authentication | Auth.js — `next-auth@5.0.0-beta.32` (pinned: v5 is a beta) and `bcryptjs` (§27) |
 | Validation | Zod 4, always on the server |
 | UI | Tailwind CSS 4 and shadcn/ui (Base UI primitives, `cn` class-merging package) |
-| Dates | `date-fns` |
-| Tests | Vitest (`vitest`, `@vitejs/plugin-react`) |
+| Dates | Built-in `Intl` (no date library needed, §30) |
+| Tests | Vitest (`vitest`), Node environment; `@types/node` 22 to match the Node 22 runtime |
 | Scripts | `tsx` (runs `prisma/seed.ts`) |
 
 Any other dependency needs a reason, recorded in PROGRESS.md.
@@ -159,7 +159,7 @@ Any other dependency needs a reason, recorded in PROGRESS.md.
 - **Next.js 16:** `cookies()`, `headers()`, route `params` and `searchParams` are async — `await` them.
 - **Next.js 16:** middleware is now **Proxy** (`src/proxy.ts`) and runs on the Node.js runtime.
 - **Next.js 16:** `next build` does not run ESLint. Run `npm run lint` separately.
-- **Next.js 16:** uploads go through Server Actions, so set `serverActions.bodySizeLimit: "6mb"` in `next.config.ts` (files are capped at 5 MB, §32).
+- **Next.js 16:** uploads go through Server Actions, so set `experimental.serverActions.bodySizeLimit: "6mb"` in `next.config.ts` (files are capped at 5 MB, §32).
 - **Prisma 6.12:** `prisma.config.ts` is early access — it needs `earlyAccess: true` and has no `datasource` key; the URL comes from `env("DATABASE_URL")` in the schema. The seed command is `package.json` → `prisma.seed`.
 - **Prisma `Decimal`** values cannot cross the server → client component boundary. Convert money to strings in the service DTO (§7).
 
@@ -497,6 +497,8 @@ type FeeSummary = {
 
 "Payment ≤ outstanding" is a read-then-write race. Recording a payment runs in `prisma.$transaction`: recompute the outstanding balance **inside** the transaction, validate, then insert. The same applies to assigning or adjusting a fee (compare against total paid inside the transaction). Failures return a domain error, never a raw Prisma error.
 
+Both operations first lock the student's row (`SELECT … FROM "Student" WHERE id = … FOR UPDATE`), so concurrent payments and fee changes for one student run one at a time. Verified: five simultaneous 40,000 BDT payments against a 150,000 BDT fee accept exactly three.
+
 ---
 
 # 8. Assessment
@@ -726,6 +728,10 @@ This is a business rule and should be enforced server-side, not merely hidden wi
 In Registry practice, results are often withheld because of unpaid fees. Whether that happens is institutional policy, so the system does **not** withhold automatically. When staff publish results for a student with an overdue balance, the UI shows the overdue amount and asks for confirmation. Staff make the call.
 
 A grade entered after a marksheet was published starts unpublished, like every new result.
+
+### Product Decision — Re-grading a published result
+
+Changing the grade of an existing result keeps its current publish state. A published result that is re-graded stays published with the new grade; staff withhold it first if the change needs review. This keeps "publish" an explicit staff action instead of something a grade edit silently undoes.
 
 ---
 
@@ -1006,6 +1012,10 @@ Conventions:
 - Every request body and query is validated with Zod (§30).
 - Error body: `{ "error": string, "fieldErrors"?: Record<string, string[]> }`.
 - Status codes: `200`/`201` success · `400` validation · `401` signed out · `403` wrong role · `404` not found · `409` conflict (duplicate email or reference, deadline passed, closed assessment).
+- A malformed id is `404`, the same as an unknown id.
+- `GET /api/assessments` for a student returns each assessment of their programme with their own submission, `status` (`SUBMITTED` / `LATE` / `PENDING`), `canUpload` and `uploadBlockedReason`.
+- `POST /api/assessments/[id]/submissions` returns `201` for a first submission and `200` for a replacement. Bodies over 5 MB are rejected before being read.
+- Handlers live in `src/app/api/**/route.ts`; each one is authorize → validate → service call (`src/lib/api/response.ts` maps errors).
 
 ---
 
@@ -1053,7 +1063,8 @@ src/
     staff/  student/                role-specific components
   types/                            type augmentation (next-auth)
 tests/
-  domain/  validations/
+  domain/  validations/  storage/  actions/
+vitest.config.mts
 ```
 
 Do not create unnecessary abstraction layers. Add a service only where it makes domain/application logic clearer or reusable. No repository pattern over Prisma and no dependency-injection container.
@@ -1726,8 +1737,12 @@ Field rules:
 | Academic year | Integer, `2000 … currentYear + 1` |
 | Payment amount | Greater than 0, at most 2 decimal places |
 | Payment date | Not in the future |
+| Payment reference | Letters, numbers, `- _ /`; stored upper-case, so uniqueness ignores case |
 | Grade | Integer, `0 … 100` |
-| File | PDF or DOCX by extension **and** MIME type; at most 5 MB |
+| Assessment deadline | ISO 8601 date-time **with** a time zone, e.g. `2026-09-30T23:59:00+06:00` |
+| File | PDF or DOCX by extension **and** MIME type; at most 5 MB; not empty |
+
+Calendar dates (date of birth, payment date, fee due date) are `YYYY-MM-DD`, compared in the Registry time zone **Asia/Dhaka** and stored as UTC midnight. "Today" therefore means today in Dhaka, not in UTC.
 
 Zod schemas live in `src/lib/validations/`.
 
@@ -1808,7 +1823,9 @@ export interface FileStorage {
 ```
 
 - `LocalFileStorage` implements it. Swapping to S3 or Vercel Blob means writing another implementation only.
-- Stored key: `${submissionId}${ext}`. The original name stays in `fileName` and is used in the `Content-Disposition` header.
+- Stored key: `${submissionId}-${timestamp}${ext}`, kept in `fileUrl`. Keys are generated on the server and checked against a strict pattern before any file-system call.
+- A file is never overwritten. A replacement is written under a new key, the database row is updated, and only then is the old file deleted. If the database update fails, the new file is removed.
+- The original name, with any path and control characters stripped, stays in `fileName` and is used in the `Content-Disposition` header.
 
 ### Download
 
@@ -1953,9 +1970,14 @@ classification  = grade >= 70 Distinction · >= 60 Merit · >= 40 Pass · otherw
 - Email: valid, invalid
 - Date of birth: future, under 15
 
+## Adapter and storage tests
+
+- `tests/actions/` — Server Actions with the session and services mocked: signed out, wrong role, invalid input, malformed ids, error mapping, and that a student's identity always comes from the session.
+- `tests/storage/` — `LocalFileStorage` save / read / delete, no overwrite, and rejection of path-traversal keys.
+
 ## End-to-end checks
 
-Access rules (published results only, own data only, role areas) are checked against a running build and recorded in PROGRESS.md. Service-level integration tests against a test database are optional and never replace the unit tests.
+Access rules (published results only, own data only, role areas), every JSON API route, the §25.1 messages and the concurrency cases are checked against a running build and recorded in PROGRESS.md. Service-level integration tests against a test database are optional and never replace the unit tests.
 
 ---
 

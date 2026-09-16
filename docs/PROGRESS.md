@@ -9,7 +9,7 @@ specification. One-line history: [development_log.md](development_log.md).
 |---|---|
 | 1 — Foundation | ✅ Done |
 | 2 — Authentication | ✅ Done |
-| 3 — Domain Logic and API | ⬜ Not started |
+| 3 — Domain Logic and API | ✅ Done |
 | 4 — Staff UI | 🟡 App shell + basic dashboard only |
 | 5 — Student UI | 🟡 App shell + basic dashboard only |
 | 6 — Quality | ⬜ Not started |
@@ -90,22 +90,62 @@ Password for all: `Password123!`
 
 ---
 
-## Phase 3 — Domain Logic and API ⬜
+## Phase 3 — Domain Logic and API ✅
 
 Spec: architecture.md §4–§13, §17.1, §26, §28–§32, §36.
 
-- [ ] Install `date-fns`, `vitest`, `@vitejs/plugin-react`; add `npm test`
-- [ ] Pure domain functions + unit tests (§36)
-- [ ] Zod schemas (§30)
-- [ ] `ActionResult`, `DomainError`, Prisma error mapping (§31)
-- [ ] Student service: race-safe Student ID, fee assigned in the same transaction, optional login creation
-- [ ] Fee/payment service: transactional payment and fee adjustment (§7)
-- [ ] Assessment service (programme-scoped, open/close)
-- [ ] File storage + submission service (§32); `storage/uploads/.gitkeep`; `serverActions.bodySizeLimit: "6mb"`
-- [ ] Result service: per result / per student / per assessment publishing
-- [ ] Server Actions
-- [ ] JSON API route handlers (§17.1), each checked with curl
-- [ ] Complete seed: payments, assessments, submissions with real PDF files, results (§28)
+- [x] `vitest` + `npm test` / `npm run test:watch`; `vitest.config.mts`; `@types/node` upgraded to 22 (vitest 5 needs it; runtime is Node 22)
+- [x] Pure domain functions — `src/lib/domain/` (fees, results, submissions, student-id, dates)
+- [x] Zod schemas — `src/lib/validations/` (students, fees, assessments, results, auth, common, ids)
+- [x] `DomainError`, `ActionResult`, `runAction`, Prisma error mapping — `src/lib/errors.ts`
+- [x] Auth guards returning 401/403 for actions and API — `src/lib/auth/guards.ts`
+- [x] Student service: race-safe Student ID (numeric max + retry on P2002), fee copied from tariff in the same transaction, optional login creation, email kept in sync with the login
+- [x] Fee service: fee summary, payment history, locked + transactional payments and fee assignment (tariff or manual), overdue list
+- [x] Assessment service: programme-scoped, open/close, programme locked once work exists, staff submission list
+- [x] File storage — `src/lib/storage/` (`LocalFileStorage`, safe keys, never overwrites); `storage/uploads/.gitkeep`; uploads gitignored
+- [x] Submission service: eligibility (open, ENROLLED, same programme), replace only until the deadline, lateness from the server clock, old file removed after the row is saved; student assessment list; ownership-checked download
+- [x] Result service: upsert, publish per result / per student / per assessment, published-only marksheet in the query
+- [x] Server Actions — `src/actions/` (students, payments, assessments, submissions, results)
+- [x] JSON API — all 16 route/method pairs in §17.1 under `src/app/api/`
+- [x] `experimental.serverActions.bodySizeLimit: "6mb"` in `next.config.ts`
+- [x] Complete seed (§28): 6 payments, 4 assessments (1 closed), 6 submissions with valid PDF files (1 late, 1 pending), 7 results (4 published)
+
+### Verified — 2026-09-16
+
+**Unit tests** — `npm test`: **99 passed** (8 files)
+
+| File | Covers |
+|---|---|
+| `tests/domain/*` (5 files) | every §36 function and boundary: outstanding, overdue at/after due date, classification 0/39/40/59/60/69/70/100, late/replace before/at/after deadline, fee validity, Student ID padding and 9→10→100→10000, Dhaka "today", age |
+| `tests/validations/validations.test.ts` | grade −1/0/40/60/70/100/101/70.5, payment 0/−100/decimals/future date, reference normalisation, email, DOB future / under 15 / exactly 15, academic year range, deadline time zone |
+| `tests/storage/storage.test.ts` | save/read/delete, no overwrite, 6 path-traversal keys rejected |
+| `tests/actions/actions.test.ts` | Server Actions: 401/403/validation/not-found mapping, generic message for unexpected errors, student id taken from the session not the form |
+
+**Seed from clean** — `prisma migrate reset --force` twice: both runs apply 2 migrations and seed identical counts. The 6 seeded PDFs have valid xref offsets and stream lengths.
+
+**JSON API end-to-end** — `next build` + `next start`, Node script signing in as staff and 6 students: **106 passed, 0 failed**. Highlights:
+
+| Area | Checked |
+|---|---|
+| Auth | no session → 401; student on staff route → 403; staff on student route → 403 |
+| Students | search by name / partial ID (case-insensitive), programme and status filters, empty result, bad status → 400, malformed / unknown id → 404, invalid JSON → 400 |
+| Enrolment | next Student ID, login created, fee copied from tariff; duplicate email (any case) → 409; future DOB, under 15, bad email + missing name, year out of range → 400 with the §25.1 messages |
+| Race: enrolment | 5 simultaneous creates → all 201 with unique consecutive IDs 0008–0012 |
+| Student edit | Student ID unchanged; programme change keeps fee with `matchesTariff: false`; reassign from tariff; duplicate email → 409 |
+| Fees | Rahim 150,000 / 90,000 / 60,000 overdue; Farhana outstanding not overdue; Nusrat paid |
+| Payments | 0 / −100 / future date → 400; 60,000.01 → "Payment exceeds the outstanding balance of 60,000.00 BDT."; duplicate reference (any case) → 409; fully paid → 409; 10,000.50 recorded exactly (49,999.50 left) |
+| Race: payments | 5 simultaneous 40,000 payments on a 150,000 fee → exactly 3 accepted; total paid 120,000 |
+| Fee assignment | manual below paid → 400 with amount; manual scholarship; back to tariff; no-tariff year → NO_FEE, payment 409, tariff 409, manual OK |
+| Assessments | staff sees 4 with counts; student sees own programme only; past deadline → 201 + warning; missing fields / no time zone / unknown programme → 400; moving an assessment with submissions → 409; close → 200 |
+| Submissions | first on time → 201; replace with DOCX → 200, same row, old file deleted from disk; path stripped from file name; replace after deadline → 409; first late submission → 201 `isLate`; txt / renamed / >5 MB / missing file → 400; other programme → 404; deferred → 403; closed → 409 |
+| Downloads | own file 200 with correct bytes and headers; another student's → 404; staff → 200 `%PDF`; signed out → 401 |
+| Results | 101 / −1 / 70.5 → 400; other programme → 409; re-grade updates, stays unpublished; new grade unpublished; student → 403; marksheet shows published only and the withheld 82 is absent from the payload; publish one → visible; withhold whole marksheet → empty; publish with no grade → 404 |
+
+Afterwards the database was reset and re-seeded, and test uploads were removed (6 seed files remain).
+
+**Also:** `tsc --noEmit` clean · `npm run build` passes (16 API routes listed) · ESLint clean except the pre-existing `use-mobile.ts` error.
+
+**Not verified over HTTP:** Server Actions. Next.js only bundles an action once a page imports it, and no Phase 4 screen does yet. They are covered by `tests/actions/` and share the services verified above. Check them through the UI in Phase 4.
 
 ---
 
@@ -130,10 +170,29 @@ Spec: architecture.md §4–§13, §17.1, §26, §28–§32, §36.
 ## Open items
 
 - `src/hooks/use-mobile.ts` (shadcn-generated) fails the `react-hooks/set-state-in-effect` lint rule. Doesn't block the build; fix with `useSyncExternalStore` (Phase 6).
+- Server Actions still need a real HTTP check once Phase 4 screens import them.
+- Student list has no pagination (fine for the demo data size).
+- Deadlines in the JSON API must include a time zone. The Phase 4 form must convert the browser's `datetime-local` value (treated as Dhaka time) before calling the action.
+- Seed assumes a fresh database for submissions: if a student replaced a seeded file through the app, re-seeding points the row back at the seed file and leaves the uploaded file orphaned.
 
 ---
 
 ## Decision log
+
+### 2026-09-16 — Phase 3 implementation decisions
+
+| Decision | Why | Recorded in |
+|---|---|---|
+| No `date-fns` or `@vitejs/plugin-react` | Date logic is small and uses `Intl`; tests run in Node, not a browser | §2.3 |
+| `@types/node` 20 → 22 | vitest 5 requires it; the runtime is Node 22 | §2.3 |
+| Lock the student row (`FOR UPDATE`) for payments and fee changes | Transactions alone don't stop two payments reading the same balance | §7 |
+| Calendar dates compared in Asia/Dhaka | A payment made at 01:00 in Dhaka would otherwise be "in the future" in UTC | §30 |
+| Storage key `${submissionId}-${timestamp}${ext}`, never overwrite | Replacing a file in place would lose the previous one if the database update failed | §32 |
+| Re-grading keeps the publish state | Publishing stays an explicit staff action | §13 |
+| Duplicate email / reference → 409 with `fieldErrors` | Matches §17.1 and still lets forms highlight the field | §17.1, §31 |
+| Payment references stored upper-case | `pay-1` and `PAY-1` would otherwise be two different references | §30 |
+| Malformed ids → 404 | Same response as unknown ids; no validation detail about internal ids | §17.1 |
+| Staff submission list also shows non-enrolled students who already submitted or were graded | Otherwise a deferred student's graded work disappears from the list | §22 |
 
 ### 2026-09-16 — architecture.md is the single specification
 
