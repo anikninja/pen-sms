@@ -1,0 +1,141 @@
+name: CI
+
+# Runs on pull requests into main. Only develop → main is allowed (see the branch-guard job).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  branch-guard:
+    name: Source branch is develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop → main from this repository
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" != "develop" ] || [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::Pull requests into main must come from the develop branch of $BASE_REPO (got $HEAD_REPO:$HEAD_REF)."
+            exit 1
+          fi
+          echo "Source branch: $HEAD_REPO:$HEAD_REF"
+
+  unit-tests:
+    name: Unit tests
+    needs: branch-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run unit tests
+        run: npm test
+
+  integration:
+    name: Migrate, seed, build and API tests
+    needs: branch-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pen_sms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pen_sms?schema=public
+      # Test-only secret for signing session cookies inside this job.
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
+      DEMO_MODE: "false"
+      E2E_BASE_URL: http://localhost:3100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Check schema
+        run: npx prisma validate
+
+      - name: Migrate and seed from a clean database (run 1)
+        run: npx prisma migrate reset --force
+
+      - name: Migrate and seed from a clean database (run 2)
+        run: npx prisma migrate reset --force
+
+      - name: Seed is idempotent
+        run: npm run db:seed
+
+      - name: Check migrations are up to date
+        run: npx prisma migrate status
+
+      - name: Build
+        run: npm run build
+
+      - name: Start app
+        run: |
+          npx next start -p 3100 > next-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$E2E_BASE_URL/api/students" || true)
+            if [ "$status" = "401" ]; then
+              echo "App is up (unauthenticated /api/students → 401)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::App did not start in time"
+          cat next-server.log
+          exit 1
+
+      - name: Run API end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-server-log
+          path: next-server.log
+          if-no-files-found: ignore
