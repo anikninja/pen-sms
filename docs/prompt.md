@@ -41,13 +41,13 @@ short on time, cut visual polish, then tests — never business rules.
 
 | Constraint | Rule |
 |---|---|
-| Framework | Next.js 14+ with **App Router**. No other backend framework. No Express, no NestJS, no tRPC. |
+| Framework | Next.js 16+ with **App Router**. No other backend framework. No Express, no NestJS, no tRPC. |
 | Database | **PostgreSQL**. Real data. No SQLite, no in-memory. |
 | ORM | **Prisma**. Schema committed to the repo. |
 | Data | **No mocked application data.** Nothing in `useState`, no hardcoded arrays of students. Every screen reads from Postgres. |
 | Styling | Tailwind CSS + **shadcn/ui**. |
 | Validation | **Zod**, on the server, always — even where client validation also exists. |
-| Auth | Not required. Use the demo role toggle in §3.3. |
+| Auth | Email + password sign-in with Auth.js (next-auth v5), roles STAFF and STUDENT. See §3.3. |
 | Language | TypeScript, `strict: true`. No `any` in domain or service code. |
 
 ---
@@ -58,6 +58,7 @@ short on time, cut visual polish, then tests — never business rules.
 npx create-next-app@latest . --typescript --tailwind --app --src-dir --eslint --import-alias "@/*"
 npm i prisma @prisma/client zod date-fns
 npm i -D vitest @vitejs/plugin-react tsx
+npm i next-auth@5.0.0-beta.32 bcryptjs   # sign-in (§3.3); pinned because v5 is a beta
 npx prisma init --datasource-provider postgresql
 npx shadcn@latest init
 npx shadcn@latest add button input label select table card badge dialog form sonner tabs separator alert
@@ -106,18 +107,27 @@ type FeeSummary = {
 
 Format for display with a single shared helper: `lib/utils/format.ts` → `formatCurrency(value, currency)`.
 
-### 3.3 Role toggle lives in a cookie, read server-side
+### 3.3 Authentication: Auth.js credentials, role from the database
 
-`architecture.md` never says where the role lives. If it lives in React state, the server-side
-enforcement required by its §13 is impossible. Therefore:
+Changed 2026-09-16 from a cookie role toggle to real sign-in. Full design: `architecture.md` §27.
 
-- Cookies: `pp_role` (`"staff" | "student"`) and `pp_student_id` (the business `studentId`, e.g. `SMS-2026-0001`).
-- `src/lib/auth/session.ts` exports `getSession(): Promise<Session>` reading those cookies, defaulting to `{ role: "staff" }`.
-- A server action `setRole(role, studentId?)` writes the cookies and calls `revalidatePath("/", "layout")`.
-- **Every student-facing query derives the student from `getSession()`.** Never from a URL param,
-  a form field, or any client-supplied value. A student must not be able to read another
+- `User` model: `email` (unique, lower-case), `name`, `passwordHash` (bcrypt), `role` (`STAFF | STUDENT`),
+  `studentId` (unique FK to `Student.id`, required for STUDENT, null for STAFF — database CHECK constraint).
+- `src/auth.ts` configures Auth.js: Credentials provider, JWT session with an 8-hour lifetime,
+  `pages.signIn = "/login"`, `trustHost: true`. Needs `AUTH_SECRET`.
+- `src/lib/auth/session.ts`:
+  - `getSession(): Promise<Session | null>` reads the JWT, then **re-reads role and studentId from
+    the database**. Wrapped in React `cache()` so it runs once per request.
+  - `requireStaff()` / `requireStudent()` for pages and layouts: redirect to `/login` when signed
+    out, or to the user's own dashboard when the role is wrong.
+- `src/proxy.ts` (Next 16's name for middleware): optimistic gate for `/staff/*` and `/student/*`.
+  **Not** the security boundary.
+- **Every layout, page, Server Action and API route checks the session itself.**
+- **Every student-facing query derives the student from `session.studentId`.** Never from a URL
+  param, a form field, or any client-supplied value. A student must not be able to read another
   student's data by changing a URL.
-- Structure this so real auth can replace `getSession()` later without touching the domain layer.
+- API routes return `401` when signed out and `403` for the wrong role (instead of redirecting).
+- Replacing Auth.js later means reimplementing `getSession()` only; domain and services don't change.
 
 ### 3.4 File storage: local disk behind an interface
 
@@ -202,6 +212,7 @@ business logic.
   reference, deadline passed, closed assessment) · `500` unexpected, with a generic message.
 - Error body: `{ "error": string, "fieldErrors"?: Record<string, string[]> }`.
 - Role and student identity come from `getSession()` (§3.3), never from the body or query.
+  Signed out → `401`; wrong role → `403`.
 - Document every route with a `curl` example in the README.
 
 ---
@@ -209,7 +220,7 @@ business logic.
 ## 4. Prisma schema
 
 Use this verbatim as `prisma/schema.prisma`. It is the corrected, final schema, revised after the
-requirements review (`architecture.md` §1.2).
+requirements review (`architecture.md` §1.2) and with the `User` model for sign-in (§3.3).
 
 ```prisma
 generator client {
@@ -219,6 +230,11 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STAFF
+  STUDENT
 }
 
 enum EnrolmentStatus {
@@ -294,6 +310,7 @@ model Student {
 
   programme   Programme    @relation(fields: [programmeId], references: [id])
   fee         StudentFee?
+  user        User?
   payments    Payment[]
   submissions Submission[]
   results     Result[]
@@ -374,6 +391,22 @@ model Result {
   @@index([studentId])
   @@index([assessmentId])
   @@index([published])
+}
+
+// Login account. STAFF users have no studentId; STUDENT users link to exactly one Student.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  studentId    String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([role])
 }
 ```
 
@@ -463,8 +496,11 @@ storage/
   uploads/.gitkeep
 src/
   app/
-    layout.tsx                    # role toggle in a shared header
-    page.tsx                      # redirects based on session role
+    layout.tsx                    # root html/body only
+    page.tsx                      # redirects to the role's dashboard, or /login
+    login/page.tsx                # sign-in form
+    (staff)/staff/layout.tsx      # requireStaff() + app shell
+    (student)/student/layout.tsx  # requireStudent() + app shell
     (staff)/staff/
       dashboard/page.tsx
       students/page.tsx
@@ -483,10 +519,11 @@ src/
     api/                          # JSON API route handlers (§3.7, architecture.md §17.1)
       files/[submissionId]/route.ts
   actions/
-    students.ts  payments.ts  assessments.ts  submissions.ts  results.ts  session.ts
+    auth.ts  students.ts  payments.ts  assessments.ts  submissions.ts  results.ts
   lib/
     prisma.ts                     # singleton, guarded against dev hot-reload duplication
-    auth/session.ts
+    auth/session.ts               # getSession, requireStaff, requireStudent
+    auth/roles.ts                 # role → home route and URL area
     domain/                       # pure functions (§5)
     services/                     # DB-touching orchestration, returns DTOs
     validations/                  # Zod schemas
@@ -496,7 +533,7 @@ src/
     api/response.ts               # ActionResult → HTTP status + JSON body
   components/
     ui/                           # shadcn
-    shared/                       # StatusBadge, EmptyState, DataTable, RoleToggle, Money
+    shared/                       # StatusBadge, EmptyState, DataTable, Money
     staff/  student/
   types/
 tests/
@@ -664,8 +701,8 @@ submission, one published result) — it shows the most interesting state in one
 
 ## 9. Staff UI specification
 
-**Shared header:** app name, nav, and the role toggle (`[ Staff ] [ Student ]`). In student mode,
-a select for which seeded student to view.
+**App shell:** sidebar with app name, the role's navigation, and the signed-in user's name and email
+with Sign out. Each phase adds its screens to the navigation.
 
 **Dashboard** — six stat cards, each reading live from the DB:
 `Total Students` · `Enrolled Students` · `Total Outstanding` · `Overdue Students` ·
@@ -829,7 +866,7 @@ Sections, in this order:
 7. Local setup — copy-pasteable, from clone to running app
 8. Database setup and migration
 9. Seed data — what it creates and which scenario each student demonstrates
-10. Demo role toggle — how to switch views and which student to look at
+10. Demo accounts and sign-in — staff and student logins, the shared demo password, `DEMO_MODE`
 11. Business rules — the formulas, stated plainly
 12. **Design decisions** — every locked decision in §3, with its rationale. This section is
     where the assessment's "deliberate product decisions" are actually graded. Write it properly.
@@ -837,8 +874,8 @@ Sections, in this order:
 14. Testing — how to run, what is covered
 15. **AI usage** — which tools, for what, and the explicit statement that all generated output was
     reviewed, tested, and adapted. Required by the assessment.
-16. Known limitations — local file storage and serverless, no auth, no submission version history,
-    no partial-payment schedule
+16. Known limitations — local file storage and serverless, no password reset / registration / rate
+    limiting, no submission version history, no partial-payment schedule
 
 ---
 

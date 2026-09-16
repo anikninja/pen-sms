@@ -55,7 +55,7 @@ The source of truth is the PEN Global assessment brief (PDF). It is marked for r
 | R4 | Students see their marksheet only after it has been published | §13, §24 |
 | S1 | GitHub repository; README with local setup, `.env` variables, and AI usage | §37, §38 |
 | S2 | Seed script: at least 5 students, 2 programmes, fees, and sample grades | §28 |
-| S3 | Staff view and Student view; a simple role toggle is acceptable | §27 |
+| S3 | Staff view and Student view; a simple role toggle is acceptable (we built real sign-in, §27) | §27 |
 | T1 | Clean schema, **working API routes**, basic error handling | §16, §17.1, §29, §31 |
 | C1 | Next.js 16+ App Router; PostgreSQL + Prisma with committed schema; Tailwind / shadcn; no other backend framework; no mocked `useState` data; `.env` example, no committed credentials | §2, §33 |
 
@@ -1331,25 +1331,76 @@ Staff publish or withhold per result, per student, or per assessment.
 
 ---
 
-# 27. Role Separation
+# 27. Role Separation and Authentication
 
-Authentication is optional for the assessment.
+The brief makes authentication optional; a role toggle would be enough. **Decision (2026-09-16):** use real sign-in, with email and password through Auth.js (next-auth v5).
 
-Implement a simple demo role mechanism:
+Why: a toggle lets anyone view any student's fees and results by switching views. With sign-in, "students only see their own data" (§13, §24) is enforced by who is signed in, not by UI state.
 
-```text
-View as:
-
-[ Staff ] [ Student ]
-```
-
-For Student view, use a seeded/demo student such as:
+## 27.1 User model
 
 ```text
-SMS-2025-0001
+User
+----
+id
+email          unique, stored lower-case
+name
+passwordHash   bcrypt
+role           STAFF | STUDENT
+studentId      FK → Student.id, unique, nullable
+createdAt
+updatedAt
 ```
 
-The role mechanism should be structured so that real authentication can be added later without rewriting the domain model.
+Rules:
+
+- `role` is a Prisma enum, `Role { STAFF, STUDENT }`.
+- A STUDENT user links to exactly one `Student`; a STAFF user links to none. Enforced by a database CHECK constraint (`User_role_student_link_check`), not only in code.
+- One login per student (`studentId` unique). Deleting a student deletes their login.
+- `User` is separate from `Student`: a Student is a Registry record, a User is a login. Staff are not students, and a student record can exist without a login.
+
+## 27.2 Sign-in and session
+
+- Credentials provider. The password is checked with bcrypt; an unknown email and a wrong password take the same time and return the same message, "Invalid email or password."
+- Session is a signed, encrypted JWT cookie with an 8-hour lifetime. No session table.
+- **The JWT only proves identity.** On every request `getSession()` re-reads the user's role and student link from the database, so a deleted account or a changed role takes effect immediately.
+- `AUTH_SECRET` signs the cookie. It lives in `.env` and is never committed.
+
+## 27.3 Enforcement layers
+
+| Layer | File | What it does |
+|---|---|---|
+| Proxy | `src/proxy.ts` | Optimistic, cookie-only check. Signed out → `/login`; wrong role's area → own dashboard. |
+| Layouts | `(staff)/staff/layout.tsx`, `(student)/student/layout.tsx` | `requireStaff()` / `requireStudent()`, checked against the database |
+| Pages, Server Actions, API routes | each file | Call `requireStaff()` / `requireStudent()` / `getSession()` themselves. Layouts and pages render in parallel, so a layout check alone is not enough. |
+| Queries | services | A student's data is looked up by `session.studentId`, never by a URL, form or body value |
+
+The proxy is a convenience, not the security boundary (Next.js docs: Proxy is for optimistic checks only).
+
+## 27.4 Routes
+
+```text
+/                    → role dashboard, or /login
+/login               → sign-in form; signed-in users are sent to their dashboard
+/staff/*             → STAFF only
+/student/*           → STUDENT only
+/api/auth/*          → Auth.js endpoints
+```
+
+## 27.5 Demo accounts
+
+Created by the seed script. Every account uses the password `Password123!`.
+
+```text
+Staff    registry@pensms.test
+Student  <first>.<last>@student.pensms.test   e.g. rahim.uddin@student.pensms.test (SMS-YYYY-0002)
+```
+
+The login page lists them only when `DEMO_MODE="true"`.
+
+## 27.6 Out of scope
+
+Registration, password reset, email verification, OAuth / SSO, account lockout and rate limiting, and staff sub-roles. Staff creating a login when enrolling a student is planned for the student service (Phase 2).
 
 ---
 
@@ -1509,7 +1560,13 @@ For the assessment, prioritize a reliable and easy-to-demonstrate implementation
 
 # 33. Security Considerations
 
-Even though authentication is optional:
+Authentication is optional in the brief, but this build uses real sign-in (§27):
+
+- Hash passwords with bcrypt; never store or log plain passwords.
+- Keep `AUTH_SECRET` in `.env` only.
+- Re-check the session and role on the server in every page, Server Action and API route; the proxy is not the security boundary.
+- Take the student's identity from the session, never from a URL, form or body.
+- Use one generic sign-in error so accounts cannot be discovered.
 
 - Never commit database credentials.
 - Provide `.env.example`.
@@ -1660,7 +1717,7 @@ The final README should contain:
 8. Database Setup
 9. Prisma Migration
 10. Seed Data
-11. Demo Credentials / Role Toggle
+11. Demo Credentials and Sign-in
 12. Business Rules
 13. Edge Cases
 14. AI Usage

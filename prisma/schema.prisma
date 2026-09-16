@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  STAFF
+  STUDENT
+}
+
 enum EnrolmentStatus {
   ENROLLED
   DEFERRED
@@ -80,6 +85,7 @@ model Student {
 
   programme   Programme    @relation(fields: [programmeId], references: [id])
   fee         StudentFee?
+  user        User?
   payments    Payment[]
   submissions Submission[]
   results     Result[]
@@ -160,4 +166,20 @@ model Result {
   @@index([studentId])
   @@index([assessmentId])
   @@index([published])
+}
+
+// Login account. STAFF users have no studentId; STUDENT users link to exactly one Student.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  studentId    String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([role])
 }
