@@ -99,7 +99,7 @@ Spec: architecture.md §4–§13, §17.1, §26, §28–§32, §36.
 - [x] Zod schemas — `src/lib/validations/` (students, fees, assessments, results, auth, common, ids)
 - [x] `DomainError`, `ActionResult`, `runAction`, Prisma error mapping — `src/lib/errors.ts`
 - [x] Auth guards returning 401/403 for actions and API — `src/lib/auth/guards.ts`
-- [x] Student service: race-safe Student ID (numeric max + retry on P2002), fee copied from tariff in the same transaction, optional login creation, email kept in sync with the login
+- [x] Student service: race-safe Student ID (per-year advisory lock + numeric max, P2002 retry as safety net), fee copied from tariff in the same transaction, optional login creation, email kept in sync with the login
 - [x] Fee service: fee summary, payment history, locked + transactional payments and fee assignment (tariff or manual), overdue list
 - [x] Assessment service: programme-scoped, open/close, programme locked once work exists, staff submission list
 - [x] File storage — `src/lib/storage/` (`LocalFileStorage`, safe keys, never overwrites); `storage/uploads/.gitkeep`; uploads gitignored
@@ -130,7 +130,7 @@ Spec: architecture.md §4–§13, §17.1, §26, §28–§32, §36.
 | Auth | no session → 401; student on staff route → 403; staff on student route → 403 |
 | Students | search by name / partial ID (case-insensitive), programme and status filters, empty result, bad status → 400, malformed / unknown id → 404, invalid JSON → 400 |
 | Enrolment | next Student ID, login created, fee copied from tariff; duplicate email (any case) → 409; future DOB, under 15, bad email + missing name, year out of range → 400 with the §25.1 messages |
-| Race: enrolment | 5 simultaneous creates → all 201 with unique consecutive IDs 0008–0012 |
+| Race: enrolment | 10 simultaneous creates → all 201 with unique consecutive IDs 0008–0017 (after the advisory-lock fix below; stress-tested at 20×3 and 50×2) |
 | Student edit | Student ID unchanged; programme change keeps fee with `matchesTariff: false`; reassign from tariff; duplicate email → 409 |
 | Fees | Rahim 150,000 / 90,000 / 60,000 overdue; Farhana outstanding not overdue; Nusrat paid |
 | Payments | 0 / −100 / future date → 400; 60,000.01 → "Payment exceeds the outstanding balance of 60,000.00 BDT."; duplicate reference (any case) → 409; fully paid → 409; 10,000.50 recorded exactly (49,999.50 left) |
@@ -246,3 +246,11 @@ committed**. architecture.md §1.1 paraphrases its requirements.
   shadcn component and was kept.
 - `prisma.config.ts` used options Prisma 6.12 doesn't support, so `npm run build` failed type-checking.
   Rewritten for 6.12; `migrate status` and the seed were re-checked.
+
+### 2026-09-16 — Fix: concurrent enrolments could fail
+
+The first CI run failed: of 5 simultaneous enrolments, one returned 409 "Could not generate a Student ID". The local Phase 3 check had passed only because of timing.
+
+- **Cause:** every concurrent transaction read the same highest Student ID; the P2002 retry lets only one win per round, so 3 attempts can't cover 5 requests. Reproduced locally: 20 simultaneous enrolments → 12–14 failures per round.
+- **Fix:** `createStudent` takes a transaction-scoped advisory lock per academic year before reading the highest ID (`src/lib/services/students.ts`). The retry remains as a safety net. architecture.md §4.2 updated.
+- **Verified:** 20 simultaneous × 3 rounds and 50 simultaneous × 2 rounds → all created, unique, gap-free. The e2e race check now uses 10 simultaneous enrolments and prints each error. Full CI sequence locally: 99 unit tests, 106 API checks passed.

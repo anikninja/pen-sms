@@ -143,14 +143,16 @@ check("login created", created.data.student?.hasLogin === true)
   check("academic year out of range → 400", r.status === 400 && r.data.fieldErrors?.academicYear, r.data)
 }
 
-// Race: 5 enrolments at once must all get distinct, consecutive IDs.
+// Race: 10 enrolments at once must all get distinct, consecutive IDs.
 {
   const results = await Promise.all(
-    [1, 2, 3, 4, 5].map((n) => api(staff, "POST", "/api/students", { ...newStudent, email: `race${n}@e2e.test`, password: undefined }))
+    Array.from({ length: 10 }, (_, n) =>
+      api(staff, "POST", "/api/students", { ...newStudent, email: `race${n + 1}@e2e.test`, password: undefined })
+    )
   )
   const ids = results.map((r) => r.data.student?.studentId).sort()
-  const expected = [8, 9, 10, 11, 12].map((n) => `SMS-${YEAR}-${String(n).padStart(4, "0")}`)
-  check("5 concurrent enrolments all succeed", results.every((r) => r.status === 201), results.map((r) => r.status))
+  const expected = Array.from({ length: 10 }, (_, n) => `SMS-${YEAR}-${String(n + 8).padStart(4, "0")}`)
+  check("10 concurrent enrolments all succeed", results.every((r) => r.status === 201), results.map((r) => `${r.status}${r.data.error ? ` ${r.data.error}` : ""}`))
   check("concurrent enrolments get unique consecutive IDs", JSON.stringify(ids) === JSON.stringify(expected), ids)
 }
 
@@ -250,7 +252,6 @@ const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).forma
 // ─── Assessments ─────────────────────────────────────────────────────────────
 const DB = "5e3d0a1c-0000-4000-8000-000000000101"
 const ALGO = "5e3d0a1c-0000-4000-8000-000000000102"
-const STRAT = "5e3d0a1c-0000-4000-8000-000000000103"
 const ACC = "5e3d0a1c-0000-4000-8000-000000000104"
 {
   const r = await api(staff, "GET", "/api/assessments")

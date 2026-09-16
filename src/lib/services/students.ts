@@ -14,6 +14,8 @@ import type {
 } from "@/lib/validations/students"
 
 const MAX_ID_ATTEMPTS = 3
+// First key of the advisory lock that serialises Student ID generation; the second key is the year.
+const STUDENT_ID_LOCK = 4_101
 const DUPLICATE_EMAIL = "A student with this email already exists."
 
 export type StudentDto = {
@@ -87,48 +89,52 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentD
 
   for (let attempt = 1; ; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
-        const studentId = await nextStudentId(tx, input.academicYear)
+      return await prisma.$transaction(
+        async (tx) => {
+          const studentId = await nextStudentId(tx, input.academicYear)
 
-        if (passwordHash && (await tx.user.findUnique({ where: { email: input.email }, select: { id: true } }))) {
-          throw fieldConflict("email", "A login with this email already exists.")
-        }
+          if (passwordHash && (await tx.user.findUnique({ where: { email: input.email }, select: { id: true } }))) {
+            throw fieldConflict("email", "A login with this email already exists.")
+          }
 
-        const tariff = await tx.programmeFee.findUnique({
-          where: {
-            programmeId_academicYear: { programmeId: input.programmeId, academicYear: input.academicYear },
-          },
-        })
+          const tariff = await tx.programmeFee.findUnique({
+            where: {
+              programmeId_academicYear: { programmeId: input.programmeId, academicYear: input.academicYear },
+            },
+          })
 
-        const row = await tx.student.create({
-          data: {
-            studentId,
-            fullName: input.fullName,
-            email: input.email,
-            dateOfBirth: isoDateToUtc(input.dateOfBirth),
-            programmeId: input.programmeId,
-            academicYear: input.academicYear,
-            enrolmentStatus: input.enrolmentStatus,
-            fee: tariff
-              ? {
-                  create: {
-                    programmeFeeId: tariff.id,
-                    amount: tariff.amount,
-                    currency: tariff.currency,
-                    dueDate: tariff.dueDate,
-                  },
-                }
-              : undefined,
-            user: passwordHash
-              ? { create: { email: input.email, name: input.fullName, passwordHash, role: "STUDENT" } }
-              : undefined,
-          },
-          select: studentSelect,
-        })
-        return toDto(row)
-      })
+          const row = await tx.student.create({
+            data: {
+              studentId,
+              fullName: input.fullName,
+              email: input.email,
+              dateOfBirth: isoDateToUtc(input.dateOfBirth),
+              programmeId: input.programmeId,
+              academicYear: input.academicYear,
+              enrolmentStatus: input.enrolmentStatus,
+              fee: tariff
+                ? {
+                    create: {
+                      programmeFeeId: tariff.id,
+                      amount: tariff.amount,
+                      currency: tariff.currency,
+                      dueDate: tariff.dueDate,
+                    },
+                  }
+                : undefined,
+              user: passwordHash
+                ? { create: { email: input.email, name: input.fullName, passwordHash, role: "STUDENT" } }
+                : undefined,
+            },
+            select: studentSelect,
+          })
+          return toDto(row)
+        },
+        // Enrolments for the same year queue on the advisory lock; allow for a burst of them.
+        { maxWait: 10_000, timeout: 15_000 }
+      )
     } catch (error) {
-      // Two enrolments in the same moment picked the same sequence: try again with a fresh one.
+      // Safety net only: the advisory lock already prevents two transactions picking the same sequence.
       if (isUniqueViolation(error, "studentId") && attempt < MAX_ID_ATTEMPTS) continue
       if (isUniqueViolation(error, "email")) throw fieldConflict("email", DUPLICATE_EMAIL)
       if (isUniqueViolation(error, "studentId")) {
@@ -139,7 +145,15 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentD
   }
 }
 
+/**
+ * Must run inside the enrolment transaction. The advisory lock is held until that transaction ends,
+ * so concurrent enrolments for the same year read the highest ID one at a time — after the previous
+ * one has committed — instead of all reading the same value and colliding (§4.2).
+ */
 async function nextStudentId(tx: Prisma.TransactionClient, year: number): Promise<string> {
+  // $executeRaw: pg_advisory_xact_lock returns void, which $queryRaw cannot deserialise.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${STUDENT_ID_LOCK}::int, ${year}::int)`
+
   // Numeric max, so SMS-2026-10000 correctly follows SMS-2026-9999.
   const [row] = await tx.$queryRaw<{ max: number }[]>`
     SELECT COALESCE(MAX(split_part("studentId", '-', 3)::int), 0)::int AS max

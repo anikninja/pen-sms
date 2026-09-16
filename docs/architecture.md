@@ -303,10 +303,13 @@ The year in the Student ID is the student's academic year at creation. The Stude
 
 Format `SMS-{academicYear}-{sequence padded to 4}`. Generate **inside a transaction**:
 
-1. Find the highest existing `studentId` with the prefix `SMS-{year}-`.
-2. Increment its sequence.
-3. Insert the student, plus its `StudentFee` when a tariff matches (§6A).
-4. On Prisma error `P2002` (unique violation on `studentId`), retry — up to 3 attempts.
+1. Take a transaction-scoped PostgreSQL advisory lock for that year (`pg_advisory_xact_lock`), so enrolments for the same year generate IDs one at a time.
+2. Find the highest existing `studentId` with the prefix `SMS-{year}-` (numeric maximum).
+3. Increment its sequence.
+4. Insert the student, plus its `StudentFee` when a tariff matches (§6A). Committing releases the lock.
+5. As a safety net only, retry on Prisma error `P2002` (unique violation on `studentId`) — up to 3 attempts.
+
+Retrying alone is **not** enough: under a burst, every transaction reads the same maximum and only one wins each round (found by CI with 5 simultaneous enrolments).
 
 Never derive the business `studentId` from the internal `id`.
 

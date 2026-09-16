@@ -28,3 +28,4 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 23. Seed completed - payments, assessments, submissions with real PDF files, results
 24. Phase 3 verified - 99 unit tests, 106 API end-to-end checks, seed reset twice, build passes
 25. Fix: next.config body size limit moved under experimental.serverActions (docs had the wrong key)
+26. Fix: concurrent enrolments - advisory lock per year for Student ID generation (CI caught a failure under 5 simultaneous requests)
