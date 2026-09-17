@@ -32,6 +32,9 @@ export function LoginForm({ className }: { className?: string }) {
         <Field data-invalid={!!state.fieldErrors?.email}>
           <FieldLabel htmlFor="email">Email</FieldLabel>
           <Input
+            // React resets the form after the action; keying on the submitted email remounts the field
+            // with it, instead of changing defaultValue on a mounted (uncontrolled) Base UI input.
+            key={state.email ?? ""}
             id="email"
             name="email"
             type="email"

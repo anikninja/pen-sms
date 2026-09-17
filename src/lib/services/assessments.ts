@@ -108,6 +108,26 @@ export async function updateAssessment(id: string, input: AssessmentUpdateInput)
 }
 
 /**
+ * Pending submissions (§19): ENROLLED students of each open assessment's programme who have not
+ * submitted. Deferred, withdrawn and completed students are not counted.
+ */
+export async function countPendingSubmissions(): Promise<number> {
+  const open = await prisma.assessment.findMany({ where: { isOpen: true }, select: { id: true, programmeId: true } })
+  const counts = await Promise.all(
+    open.map((assessment) =>
+      prisma.student.count({
+        where: {
+          programmeId: assessment.programmeId,
+          enrolmentStatus: "ENROLLED",
+          submissions: { none: { assessmentId: assessment.id } },
+        },
+      })
+    )
+  )
+  return counts.reduce((total, count) => total + count, 0)
+}
+
+/**
  * Staff submission list (§22): every ENROLLED student of the assessment's programme, plus any other
  * student who already submitted or was graded (e.g. deferred after submitting).
  */

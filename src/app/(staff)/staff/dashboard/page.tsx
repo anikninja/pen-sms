@@ -1,75 +1,61 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 
-import { EnrolmentStatusBadge } from "@/components/shared/enrolment-status-badge"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { EmptyState } from "@/components/shared/empty-state"
+import { PageHeader } from "@/components/shared/page-header"
+import { EnrolmentStatusBadge } from "@/components/shared/status-badges"
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
-import { prisma } from "@/lib/prisma"
+import { getStaffDashboard } from "@/lib/services/dashboard"
+import { formatCurrency, formatDate } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Dashboard · Registry" }
 
 export default async function StaffDashboardPage() {
   // Layouts and pages render in parallel, so each page checks the role itself.
   const session = await requireStaff()
+  const dashboard = await getStaffDashboard()
 
-  const [totalStudents, enrolledStudents, activeProgrammes, unpublishedResults, recentStudents] =
-    await Promise.all([
-      prisma.student.count(),
-      prisma.student.count({ where: { enrolmentStatus: "ENROLLED" } }),
-      prisma.programme.count({ where: { active: true } }),
-      prisma.result.count({ where: { published: false } }),
-      prisma.student.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          studentId: true,
-          fullName: true,
-          academicYear: true,
-          enrolmentStatus: true,
-          programme: { select: { code: true } },
-        },
-      }),
-    ])
+  const outstanding =
+    dashboard.totalOutstanding.length === 0
+      ? "0.00"
+      : dashboard.totalOutstanding.map((total) => formatCurrency(total.amount, total.currency)).join(" · ")
 
   const stats = [
-    { label: "Total Students", value: totalStudents },
-    { label: "Enrolled Students", value: enrolledStudents },
-    { label: "Active Programmes", value: activeProgrammes },
-    { label: "Unpublished Results", value: unpublishedResults },
+    { label: "Total Students", value: dashboard.totalStudents, href: "/staff/students" },
+    { label: "Enrolled Students", value: dashboard.enrolledStudents, href: "/staff/students?status=ENROLLED" },
+    { label: "Total Outstanding", value: outstanding, href: "/staff/fees?status=OUTSTANDING" },
+    { label: "Overdue Students", value: dashboard.overdueStudents, href: "/staff/fees?status=OVERDUE", alert: dashboard.overdueStudents > 0 },
+    { label: "Pending Submissions", value: dashboard.pendingSubmissions, href: "/staff/assessments", hint: "Enrolled students yet to submit to open assessments" },
+    { label: "Unpublished Results", value: dashboard.unpublishedResults, href: "/staff/results" },
   ]
 
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold">Welcome, {session.name}</h1>
-        <p className="text-sm text-muted-foreground">Registry overview</p>
-      </div>
+      <PageHeader title={`Welcome, ${session.name}`} description="Registry overview" />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader>
-              <CardDescription>{stat.label}</CardDescription>
-              <CardTitle className="text-3xl tabular-nums">{stat.value}</CardTitle>
-            </CardHeader>
-          </Card>
+          <Link key={stat.label} href={stat.href} className="rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            <Card className={stat.alert ? "h-full ring-destructive/40" : "h-full transition-colors hover:bg-muted/40"}>
+              <CardHeader>
+                <CardDescription>{stat.label}</CardDescription>
+                <CardTitle className={`text-2xl tabular-nums ${stat.alert ? "text-destructive" : ""}`}>{stat.value}</CardTitle>
+              </CardHeader>
+              {stat.hint && <CardFooter className="text-xs text-muted-foreground">{stat.hint}</CardFooter>}
+            </Card>
+          </Link>
         ))}
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Recently added students</h2>
-        {recentStudents.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No students yet. Run <code>npm run db:seed</code> to load demo data.
-          </p>
+        <div>
+          <h2 className="text-lg font-medium">Overdue Fees</h2>
+          <p className="text-sm text-muted-foreground">Outstanding balance past the due date, most overdue first.</p>
+        </div>
+        {dashboard.overdue.length === 0 ? (
+          <EmptyState title="No overdue fees">Every student with a past due date has paid in full.</EmptyState>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
@@ -78,20 +64,28 @@ export default async function StaffDashboardPage() {
                   <TableHead>Student ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Programme</TableHead>
-                  <TableHead>Year</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Outstanding</TableHead>
+                  <TableHead>Due date</TableHead>
+                  <TableHead className="text-right">Days overdue</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentStudents.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="font-mono text-xs">{student.studentId}</TableCell>
-                    <TableCell>{student.fullName}</TableCell>
-                    <TableCell>{student.programme.code}</TableCell>
-                    <TableCell>{student.academicYear}</TableCell>
-                    <TableCell>
-                      <EnrolmentStatusBadge status={student.enrolmentStatus} />
+                {dashboard.overdue.map((row) => (
+                  <TableRow key={row.student.id}>
+                    <TableCell className="font-mono text-xs">
+                      <Link href={`/staff/students/${row.student.id}?tab=fees`} className="underline-offset-4 hover:underline">
+                        {row.student.studentId}
+                      </Link>
                     </TableCell>
+                    <TableCell>{row.student.fullName}</TableCell>
+                    <TableCell>{row.student.programme.code}</TableCell>
+                    <TableCell>
+                      <EnrolmentStatusBadge status={row.student.enrolmentStatus} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCurrency(row.outstanding, row.currency ?? "")}</TableCell>
+                    <TableCell>{row.dueDate ? formatDate(row.dueDate) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium text-destructive">{row.daysOverdue}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

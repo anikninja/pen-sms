@@ -43,8 +43,10 @@ export default async function LoginPage() {
                   ))}
                 </ul>
                 <p className="mt-2">
-                  Password: <code>{DEMO_PASSWORD}</code>. Every seeded student can sign in with
-                  their student email.
+                  <span className="text-foreground">Password:</span>{" "}<code>{DEMO_PASSWORD}</code>
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  <span>Note: Every seeded student can sign in with their student email.</span>
                 </p>
               </div>
             )}

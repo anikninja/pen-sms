@@ -378,7 +378,7 @@ The assessment requires overdue balances but does not specify a detailed payment
 For this MVP:
 
 ```text
-overdue = today > studentFee.dueDate AND outstandingBalance > 0
+overdue = today (Dhaka) > studentFee.dueDate AND outstandingBalance > 0
 ```
 
 Document this as an explicit product decision in the README.
@@ -1062,8 +1062,9 @@ src/
     errors.ts                       DomainError, ActionResult
   components/
     ui/                             shadcn primitives
-    shared/                         status badges, empty states, money
-    staff/  student/                role-specific components
+    shared/                         status badges, empty state, page header, confirm dialog, useServerAction
+    staff/                          student form, fee dialogs, grade table, result publish controls, URL tabs
+    student/                        student-portal components
   types/                            type augmentation (next-auth)
 tests/
   domain/  validations/  storage/  actions/
@@ -1282,6 +1283,16 @@ Late Flag
 - Only assessments of the student's own programme are listed.
 - Upload is available while the assessment is open and the student is ENROLLED.
 - Replacing an existing submission is available until the deadline. After it, the student sees their submission and why it can no longer be replaced.
+- Replacing asks for confirmation first. An upload after the deadline warns that it will be marked late.
+- The browser checks type, size and a missing file for instant feedback; the server re-checks everything.
+- A closed assessment the student never submitted is labelled "Not submitted" (not "Pending").
+
+### At a glance
+
+- **Outstanding balance** with fee status and days overdue (or "No fee assigned").
+- **Next deadline:** the soonest *open* assessment whose deadline has not passed, with the student's submission status.
+- **Work to do:** open assessments the student can still submit and has not; number of late submissions; number of published results.
+- A notice when the student is not ENROLLED, explaining they cannot submit new work.
 
 ## Marksheet
 
@@ -1293,7 +1304,7 @@ Grade
 Classification
 ```
 
-Unpublished results must not appear, and must not be in the data sent to the browser. The filter is in the **database query** (`where: { published: true }`), not a React condition.
+Unpublished results must not appear, and must not be in the data sent to the browser. The filter is in the **database query** (`where: { published: true }`), not a React condition. The marksheet does not show how many results are withheld.
 
 ---
 
@@ -1468,8 +1479,11 @@ tariff changes never modify existing studentFee rows
 ```text
 outstanding > 0
 AND
-today > dueDate
+today (Dhaka calendar) > dueDate
+daysOverdue = calendar days after dueDate
 ```
+
+A due date is the last day to pay: a fee due on 30 Sep is not overdue at any time on 30 Sep and is 1 day overdue on 1 Oct (implemented by comparing against the end of the due day in Dhaka, `endOfRegistryDay`).
 
 ## Submission
 
@@ -1742,7 +1756,7 @@ Field rules:
 | Payment date | Not in the future |
 | Payment reference | Letters, numbers, `- _ /`; stored upper-case, so uniqueness ignores case |
 | Grade | Integer, `0 … 100` |
-| Assessment deadline | ISO 8601 date-time **with** a time zone, e.g. `2026-09-30T23:59:00+06:00` |
+| Assessment deadline | ISO 8601 date-time **with** a time zone, e.g. `2026-09-30T23:59:00+06:00`. The staff form uses `datetime-local`, entered in Dhaka time and converted in the browser (`src/lib/utils/datetime.ts`) |
 | File | PDF or DOCX by extension **and** MIME type; at most 5 MB; not empty |
 
 Calendar dates (date of birth, payment date, fee due date) are `YYYY-MM-DD`, compared in the Registry time zone **Asia/Dhaka** and stored as UTC midnight. "Today" therefore means today in Dhaka, not in UTC.
@@ -1892,6 +1906,21 @@ Prioritize:
 Avoid excessive animations and decorative UI.
 
 The evaluator should understand the system immediately.
+
+## 34.1 Loading, Error and Not-Found States
+
+| State | Where | Behaviour |
+|---|---|---|
+| Loading | `loading.tsx` in each role area and on record pages (`students/[id]`, `assessments/[id]`) | Skeleton shaped like a page, inside the app shell, so navigation stays usable |
+| Page error | `error.tsx` in each role area | "Something went wrong" inside the shell, with **Try again** and **Go to dashboard**. Never shows the error message, only the digest as a reference that matches the server log (§33) |
+| Layout or login error | `app/error.tsx` | Same message, full page (e.g. the database is unreachable) |
+| Root layout error | `app/global-error.tsx` | Plain last-resort page |
+| Not found | `not-found.tsx` in each role area, plus `app/not-found.tsx` for unknown URLs | "Page not found" with a link to the role's dashboard (or `/`) |
+| Sign-in while the database is unreachable | Login form | "Sign-in is unavailable right now. Please try again in a moment." — not "Invalid email or password" |
+
+A record page that calls `notFound()` after the shell has started streaming keeps HTTP status 200; Next.js marks it `noindex`. The JSON API returns a real 404.
+
+Layout must not scroll horizontally at 375, 768, 1024 and 1280 px. Wide tables scroll inside their own container; from 768 px the sidebar takes 256 px, so multi-column filter rows start at `lg`.
 
 ---
 
@@ -2074,41 +2103,43 @@ The assessment explicitly states that this is not a full platform.
 
 The application is considered complete when:
 
+*Every box below was verified against a running build on seeded data; the verification runs are recorded in [PROGRESS.md](PROGRESS.md) (last: fresh clone, 2026-09-18).*
+
 ### Student Enrolment
 
-- [ ] Staff can create students.
-- [ ] Student ID is automatically generated.
-- [ ] Student ID is unique.
-- [ ] Students can be searched.
-- [ ] Students can be filtered.
-- [ ] Status works.
+- [x] Staff can create students.
+- [x] Student ID is automatically generated.
+- [x] Student ID is unique.
+- [x] Students can be searched.
+- [x] Students can be filtered.
+- [x] Status works.
 
 ### Fees
 
-- [ ] Programme fees exist.
-- [ ] A fee is assigned to each student from the programme tariff and can be adjusted.
-- [ ] Payments can be recorded.
-- [ ] Outstanding balance is calculated.
-- [ ] Overdue students are identified.
+- [x] Programme fees exist.
+- [x] A fee is assigned to each student from the programme tariff and can be adjusted.
+- [x] Payments can be recorded.
+- [x] Outstanding balance is calculated.
+- [x] Overdue students are identified.
 
 ### Assessments
 
-- [ ] Staff can create assessments for a programme.
-- [ ] Staff can open and close assessments.
-- [ ] Students can submit PDF/DOCX.
-- [ ] One active submission per student/assessment.
-- [ ] Resubmission before deadline works.
-- [ ] Resubmission after deadline is rejected.
-- [ ] Late submissions are accepted.
-- [ ] Late submissions are visibly flagged.
+- [x] Staff can create assessments for a programme.
+- [x] Staff can open and close assessments.
+- [x] Students can submit PDF/DOCX.
+- [x] One active submission per student/assessment.
+- [x] Resubmission before deadline works.
+- [x] Resubmission after deadline is rejected.
+- [x] Late submissions are accepted.
+- [x] Late submissions are visibly flagged.
 
 ### Results
 
-- [ ] Staff can enter grades.
-- [ ] Grades are validated 0–100.
-- [ ] Classification is calculated.
-- [ ] Staff can publish/withhold results per result and per student.
-- [ ] Students only see published results.
+- [x] Staff can enter grades.
+- [x] Grades are validated 0–100.
+- [x] Classification is calculated.
+- [x] Staff can publish/withhold results per result and per student.
+- [x] Students only see published results.
 
 ### Authentication
 
@@ -2118,17 +2149,17 @@ The application is considered complete when:
 
 ### Engineering
 
-- [ ] PostgreSQL is used.
-- [ ] Prisma is used.
-- [ ] Prisma schema is committed.
-- [ ] JSON API routes work and share the service layer with Server Actions.
-- [ ] No mocked application data.
-- [ ] Seed data works.
-- [ ] Error handling exists.
-- [ ] README is complete.
-- [ ] `.env.example` exists.
-- [ ] AI usage is documented.
-- [ ] Code is committed to GitHub.
+- [x] PostgreSQL is used.
+- [x] Prisma is used.
+- [x] Prisma schema is committed.
+- [x] JSON API routes work and share the service layer with Server Actions.
+- [x] No mocked application data.
+- [x] Seed data works.
+- [x] Error handling exists.
+- [x] README is complete.
+- [x] `.env.example` exists.
+- [x] AI usage is documented.
+- [x] Code is committed to GitHub.
 
 ---
 

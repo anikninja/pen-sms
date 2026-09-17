@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest"
 
-import { ageOn, isIsoDate, registryToday } from "@/lib/domain/dates"
+import { Prisma } from "@prisma/client"
+
+import { ageOn, calendarDaysPast, endOfRegistryDay, isIsoDate, isoDateToUtc, registryToday } from "@/lib/domain/dates"
+import { isOverdue } from "@/lib/domain/fees"
+
+describe("endOfRegistryDay (calendar due dates)", () => {
+  const due = isoDateToUtc("2026-09-30")
+  const deadline = endOfRegistryDay(due)
+  const owed = new Prisma.Decimal(100)
+
+  it("is 23:59:59.999 in Dhaka on the due date", () => {
+    expect(deadline.toISOString()).toBe("2026-09-30T17:59:59.999Z")
+  })
+
+  it("is not overdue at any time on the due date in Dhaka", () => {
+    expect(isOverdue(owed, deadline, new Date("2026-09-30T06:00:00+06:00"))).toBe(false)
+    expect(isOverdue(owed, deadline, new Date("2026-09-30T23:59:59+06:00"))).toBe(false)
+  })
+
+  it("is overdue from the start of the next day in Dhaka", () => {
+    expect(isOverdue(owed, deadline, new Date("2026-10-01T00:00:00+06:00"))).toBe(true)
+  })
+
+  it("counts calendar days past the due date in Dhaka", () => {
+    expect(calendarDaysPast(due, new Date("2026-09-30T23:00:00+06:00"))).toBe(0)
+    expect(calendarDaysPast(due, new Date("2026-10-01T00:00:00+06:00"))).toBe(1)
+    expect(calendarDaysPast(due, new Date("2026-10-02T23:59:00+06:00"))).toBe(2)
+    expect(calendarDaysPast(due, new Date("2026-09-01T12:00:00+06:00"))).toBe(0)
+  })
+})
 
 describe("registryToday", () => {
   it("uses the Dhaka calendar date, not UTC", () => {
