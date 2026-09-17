@@ -1,7 +1,7 @@
 # Build Progress
 
 Live status of the build. Phases follow [architecture.md](architecture.md) §41, which is the single
-specification. One-line history: [development_log.md](development_log.md).
+specification. One-line history: [development_log.md](development_log.md). Deferred work: [TODO.md](TODO.md).
 
 **Update this file after every completed piece of work** (architecture.md §2.4).
 
@@ -321,7 +321,7 @@ Afterwards the test database was dropped and the clone deleted.
 
 ## Open items
 
-- The Docker setup (`Dockerfile`, `docker-compose.yml`) is unverified, and `npm install` now needs `prisma/` present (see the Phase 7 fix). To be done on a machine with Docker.
+- The Docker setup (`Dockerfile`, `docker-compose.yml`) has never been built or run. Known blockers and the full checklist are in [TODO.md](TODO.md); to be done on a machine with Docker.
 - Student list has no pagination (fine for the demo data size).
 - Deadlines in the JSON API must include a time zone (the staff form converts `datetime-local` as Dhaka time).
 - A record page that is not found returns HTTP 200 (the shell streams first; Next.js adds `noindex`). The JSON API returns 404. Accepted: the loading states are worth more than the page status in a signed-in app.

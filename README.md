@@ -345,7 +345,7 @@ For a production build locally: `npm run build` then `npm run start`.
 
 ### B. Docker (VPS) — not yet verified
 
-`docker-compose.yml` defines a PostgreSQL 16 service and the app. This setup has not been tested yet and will be finalised separately. Two things any server deployment needs:
+`docker-compose.yml` defines a PostgreSQL 16 service and the app. This setup has **not been built or run yet**, and the files need changes before it will work — the open list is [docs/TODO.md](docs/TODO.md). Two things any server deployment needs:
 
 - **Persistent storage for `storage/uploads/`** — uploaded submissions are saved there.
 - **Run `npm run db:deploy` and `npm run db:seed` on the server itself** — the seed also writes the sample submission files to that machine's `storage/uploads/`.
@@ -556,4 +556,4 @@ AI was used throughout as an engineering assistant. The architecture, business r
 - **No pagination** on the students list (fine for the demo data size).
 - A record page that is not found shows "Page not found" with HTTP status 200 (Next.js streaming; the page is marked `noindex`). The JSON API returns a real 404.
 - `next-auth` v5 is a beta release (pinned to an exact version).
-- The Docker setup is included but not yet verified.
+- The Docker setup is included but not yet verified; see [docs/TODO.md](docs/TODO.md).

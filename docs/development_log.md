@@ -53,3 +53,4 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 48. README for reviewers - features, architecture and ERD, API table with curl examples, setup, seed, rules, decisions, edge cases, testing, AI usage, limitations
 49. Fix: npm install now generates Prisma Client (postinstall) - a fresh clone could not run the seed
 50. Phase 7 verified - fresh clone set up from the README alone: install, migrate, seed, lint, 111 tests, build, curl examples, 106 API checks, 15 staff + 13 student flows
+51. TODO.md for the unverified Docker/VPS setup - blockers found in the current files, uploads volume, server-side migrate and seed, secrets, image hygiene, verification steps
