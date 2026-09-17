@@ -20,7 +20,18 @@ export function useServerAction() {
   ) {
     setError(null)
     startTransition(async () => {
-      const result = await action()
+      let result: ActionResult<T>
+      try {
+        result = await action()
+      } catch (error) {
+        // The action never returned a result: network failure, or a request Next.js rejected before
+        // it ran (e.g. an upload over the Server Action body size limit).
+        console.error(error)
+        const message = "The request could not be completed. Check the file size and your connection, then try again."
+        setError(message)
+        toast.error(message)
+        return
+      }
       if (result.ok) {
         setFieldErrors({})
         const message = typeof options.success === "function" ? options.success(result.data) : options.success

@@ -37,3 +37,9 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 32. Fix: fee due dates are calendar days - overdue starts the day after the due date in Dhaka; seeded tariff due dates made calendar dates
 33. Phase 4 verified - 14 staff flows in headless Chrome with no console errors, 111 unit tests, 106 API checks, build passes
 34. Fix: Base UI uncontrolled input warning - key login email and students search form, freeze dialog and edit-form defaults; stale Status filter after Clear fixed
+35. Student portal navigation and dashboard - outstanding balance, next deadline, work to do, published results
+36. Student fees and marksheet - fee summary and payment history (shared with staff), published-only marksheet
+37. Student assessments - own programme, upload with browser checks, replace with confirmation, late warning, blocked reasons
+38. Fix: raw control bytes in submissions.ts made git treat it as binary - replaced with \u escapes
+39. Fix: forms now report Server Action requests that fail before running (e.g. upload over the body size limit)
+40. Phase 5 verified - 13 student flows across 4 students in headless Chrome, 14 staff flows, 111 unit tests, 106 API checks, build passes

@@ -5,6 +5,7 @@ import { DownloadIcon, PencilIcon } from "lucide-react"
 
 import { ButtonLink } from "@/components/shared/button-link"
 import { EmptyState } from "@/components/shared/empty-state"
+import { FeeSummaryCards, PaymentHistoryTable } from "@/components/shared/fee-summary"
 import { PageHeader } from "@/components/shared/page-header"
 import {
   EnrolmentStatusBadge,
@@ -16,7 +17,7 @@ import {
 import { AssignFeeDialog, RecordPaymentDialog, ReassignTariffButton } from "@/components/staff/fee-dialogs"
 import { MarksheetPublishButtons, ResultPublishToggle, type OverdueInfo } from "@/components/staff/result-actions"
 import { UrlTabs } from "@/components/staff/url-tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
 import { registryToday } from "@/lib/domain/dates"
@@ -25,11 +26,9 @@ import { getStudentFees } from "@/lib/services/fees"
 import { getStudentResults } from "@/lib/services/results"
 import { getStudent } from "@/lib/services/students"
 import { getStudentAssessments } from "@/lib/services/submissions"
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format"
+import { formatBytes, formatDate, formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Student · Registry" }
-
-const formatBytes = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
 export default async function StudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireStaff()
@@ -80,21 +79,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             : "There is no tariff for this programme and academic year. Set a manual fee to record payments."}
         </EmptyState>
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[
-            ["Total fee", formatCurrency(summary.totalFee, summary.currency)],
-            ["Total paid", formatCurrency(summary.totalPaid, summary.currency)],
-            ["Outstanding", formatCurrency(summary.outstanding, summary.currency)],
-            ["Due date", summary.dueDate ? formatDate(summary.dueDate) : "—"],
-          ].map(([label, value]) => (
-            <Card key={label} size="sm">
-              <CardHeader>
-                <CardDescription>{label}</CardDescription>
-                <CardTitle className="text-lg tabular-nums">{value}</CardTitle>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
+        <FeeSummaryCards summary={summary} />
       )}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -130,30 +115,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
       <section className="space-y-3">
         <h3 className="font-medium">Payment history</h3>
-        {payments.length === 0 ? (
-          <EmptyState title="No payments recorded" />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>{formatDate(payment.paymentDate)}</TableCell>
-                    <TableCell className="font-mono text-xs">{payment.referenceNumber}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(payment.amount, summary.currency)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        <PaymentHistoryTable payments={payments} currency={summary.currency} />
       </section>
     </div>
   )

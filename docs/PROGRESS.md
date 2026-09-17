@@ -11,7 +11,7 @@ specification. One-line history: [development_log.md](development_log.md).
 | 2 — Authentication | ✅ Done |
 | 3 — Domain Logic and API | ✅ Done |
 | 4 — Staff UI | ✅ Done |
-| 5 — Student UI | 🟡 App shell + basic dashboard only |
+| 5 — Student UI | ✅ Done |
 | 6 — Quality | ⬜ Not started |
 | 7 — Submission | ⬜ Not started |
 
@@ -201,11 +201,46 @@ Server Actions are now bundled (pages import them) and were exercised over HTTP 
 
 ---
 
-## Phase 5 — Student UI 🟡
+## Phase 5 — Student UI ✅
 
-- [x] App shell
-- [ ] Dashboard: add outstanding balance and next deadline (§24)
-- [ ] Fees · Assessments · Marksheet
+Spec: architecture.md §24. Every screen takes the student from the session (`requireStudent()` → `session.studentId`); no student-facing URL contains an id.
+
+- [x] Navigation: Dashboard · Fees · Assessments · Marksheet (no staff links)
+- [x] **Dashboard** (`/student/dashboard`) — outstanding balance with fee status and days overdue; next deadline (soonest open assessment whose deadline has not passed) with its submission status; work to do (assessments still to submit, late submissions); published result count; enrolment details; notice when the student is not ENROLLED
+- [x] **Fees** (`/student/fees`) — status, overdue notice, total fee / paid / outstanding / due date, payment history; "No fee assigned" instead of a zero balance
+- [x] **Assessments** (`/student/assessments`) — own programme only; Open/Closed and Submitted/Late/Pending badges ("Not submitted" when a closed assessment was never submitted); own file download; upload while open and ENROLLED; file checked in the browser (type, size, missing) before upload; **replacing asks for confirmation**; warning that an upload after the deadline will be marked late; the reason is shown when uploading is blocked
+- [x] **Marksheet** (`/student/marksheet`) — published results only (assessment, module, grade, classification); classification legend; empty state. Withheld results are not counted or mentioned
+- [x] Shared with staff: `FeeSummaryCards`, `PaymentHistoryTable` (`src/components/shared/fee-summary.tsx`)
+- [x] New read model: `getStudentOverview` (`src/lib/services/student-portal.ts`); `StudentAssessmentDto.isPastDeadline` computed once on the server
+
+### Verified — 2026-09-17
+
+**Real browser** — headless Chrome against `next build` + `next start` on a fresh seed, signed in through the login form as four students: **13 of 13 flows clean** (no console errors, exceptions or hydration warnings).
+
+| Student | Checked |
+|---|---|
+| Rahim (overdue, late DB submission) | Dashboard: 60,000.00 BDT overdue, next deadline Algorithms Assignment 1, 1 late, 1 published; student-only navigation |
+| | Fees: overdue notice, 150,000 / 90,000 / 60,000, payment history |
+| | Assessments: only BSC-CS assessments; DB shows Late and "The deadline has passed. Your existing submission can no longer be replaced."; own file downloads (`%PDF`) |
+| | Upload checks: `.txt` → "Only PDF and DOCX files are accepted."; 5 MB + 1 byte → "File must be smaller than 5 MB."; no file → prompt |
+| | First upload → Submitted (on time), file written; replace → confirmation; **Keep current file** leaves it unchanged; **Replace file** → new DOCX shown, old file deleted from disk |
+| | Marksheet: DB 70 Distinction only |
+| | `/staff/dashboard` → redirected to student dashboard; another student's file → 404; `/api/students` → 403 |
+| Nusrat (ALGO 82 withheld) | Marksheet shows DB 78 only; "Algorithms Assignment 1" and `"grade":82` absent from both the HTML and the RSC payload |
+| Tanvir (deferred) | Dashboard notice; no upload controls on any assessment; "Only enrolled students can submit." |
+| Farhana (MBA) | Only MBA assessments; closed Financial Accounting shows "Not submitted" and "closed for submissions"; open Strategy allows replacement; marksheet "No published results yet" with the withheld Fail absent from the RSC payload |
+| 375px | Assessments page does not scroll horizontally |
+
+Screenshots were reviewed; one wording issue found and fixed ("Pending" on a closed, unsubmitted assessment → "Not submitted").
+
+**Regression:** `npm test` **111 passed** · staff browser walkthrough **14/14** · API end-to-end **106 passed, 0 failed** · `tsc` clean · `npm run build` passes (4 student routes) · ESLint: only the pre-existing `use-mobile.ts` error.
+
+### Fixes found while building this phase
+
+- **Raw control bytes in `submissions.ts`.** The file-name sanitiser's regex contained real NUL/US/DEL characters instead of `\u0000` escapes (written that way in Phase 3). Behaviour was correct, but git and grep treated the file as **binary**, hiding its diffs. Rewritten with escapes; a scan of `src`, `tests`, `prisma`, `scripts` and `docs` found no other file affected.
+- **Thrown Server Action errors were unhandled in forms.** `useServerAction` only handled returned results; a request Next.js rejects before the action runs (e.g. an upload over the 6 MB body limit) or a network failure left the form silent. It now shows a toast and error message.
+
+---
 
 ## Phase 6 — Quality ⬜
 

@@ -1283,6 +1283,16 @@ Late Flag
 - Only assessments of the student's own programme are listed.
 - Upload is available while the assessment is open and the student is ENROLLED.
 - Replacing an existing submission is available until the deadline. After it, the student sees their submission and why it can no longer be replaced.
+- Replacing asks for confirmation first. An upload after the deadline warns that it will be marked late.
+- The browser checks type, size and a missing file for instant feedback; the server re-checks everything.
+- A closed assessment the student never submitted is labelled "Not submitted" (not "Pending").
+
+### At a glance
+
+- **Outstanding balance** with fee status and days overdue (or "No fee assigned").
+- **Next deadline:** the soonest *open* assessment whose deadline has not passed, with the student's submission status.
+- **Work to do:** open assessments the student can still submit and has not; number of late submissions; number of published results.
+- A notice when the student is not ENROLLED, explaining they cannot submit new work.
 
 ## Marksheet
 
@@ -1294,7 +1304,7 @@ Grade
 Classification
 ```
 
-Unpublished results must not appear, and must not be in the data sent to the browser. The filter is in the **database query** (`where: { published: true }`), not a React condition.
+Unpublished results must not appear, and must not be in the data sent to the browser. The filter is in the **database query** (`where: { published: true }`), not a React condition. The marksheet does not show how many results are withheld.
 
 ---
 

@@ -41,3 +41,8 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 export function formatDateTime(value: Date | string): string {
   return dateTimeFormatter.format(typeof value === "string" ? new Date(value) : value)
 }
+
+/** 2048 → "2 KB", 1_500_000 → "1.4 MB". */
+export function formatBytes(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}

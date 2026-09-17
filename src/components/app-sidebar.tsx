@@ -33,7 +33,12 @@ const NAV: Record<AppRole, NavItem[]> = {
     { title: "Assessments", url: "/staff/assessments", icon: <ClipboardListIcon /> },
     { title: "Results", url: "/staff/results", icon: <TrophyIcon /> },
   ],
-  STUDENT: [{ title: "Dashboard", url: "/student/dashboard", icon: <LayoutDashboardIcon /> }],
+  STUDENT: [
+    { title: "Dashboard", url: "/student/dashboard", icon: <LayoutDashboardIcon /> },
+    { title: "Fees", url: "/student/fees", icon: <ReceiptIcon /> },
+    { title: "Assessments", url: "/student/assessments", icon: <ClipboardListIcon /> },
+    { title: "Marksheet", url: "/student/marksheet", icon: <TrophyIcon /> },
+  ],
 }
 
 export function AppSidebar({
