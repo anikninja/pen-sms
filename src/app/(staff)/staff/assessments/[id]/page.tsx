@@ -58,7 +58,7 @@ export default async function AssessmentDetailPage({ params }: { params: Promise
         {[
           ["Deadline", formatDateTime(assessment.submissionDeadline), assessment.isPastDeadline ? "Passed" : "Upcoming"],
           ["Submitted", `${counts.submitted} / ${counts.students}`, counts.late ? `${counts.late} late` : "None late"],
-          ["Pending", counts.pending, assessment.isOpen ? "Enrolled, not submitted" : "Closed for submissions"],
+          assessment.isOpen ? ["Pending", counts.pending, "Enrolled, not submitted"] : ["Not submitted", counts.pending, "Closed for submissions"],
           ["Graded", counts.graded, `${counts.students - counts.graded} not graded`],
           ["Withheld", counts.unpublished, `${counts.graded - counts.unpublished} published`],
         ].map(([label, value, hint]) => (
@@ -88,7 +88,7 @@ export default async function AssessmentDetailPage({ params }: { params: Promise
             overdueGradedCount={counts.overdueGraded}
           />
         </div>
-        <GradeTable assessmentId={id} assessmentTitle={assessment.title} rows={rows} />
+        <GradeTable assessmentId={id} assessmentTitle={assessment.title} isOpen={assessment.isOpen} rows={rows} />
       </section>
     </>
   )

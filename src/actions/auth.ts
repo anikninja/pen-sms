@@ -30,7 +30,10 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   } catch (error) {
     if (error instanceof AuthError) {
       // One message for unknown email and wrong password, so accounts can't be discovered.
-      return { error: "Invalid email or password.", email }
+      if (error.type === "CredentialsSignin") return { error: "Invalid email or password.", email }
+      // The credential check itself failed (e.g. database unreachable): don't blame the password.
+      console.error(error)
+      return { error: "Sign-in is unavailable right now. Please try again in a moment.", email }
     }
     throw error // includes the success redirect
   }

@@ -84,7 +84,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
                   overdueGradedCount={grading.counts.overdueGraded}
                 />
               </div>
-              <GradeTable assessmentId={selected.id} assessmentTitle={selected.title} rows={grading.rows} />
+              <GradeTable assessmentId={selected.id} assessmentTitle={selected.title} isOpen={selected.isOpen} rows={grading.rows} />
             </section>
           )}
         </>

@@ -43,3 +43,9 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 38. Fix: raw control bytes in submissions.ts made git treat it as binary - replaced with \u escapes
 39. Fix: forms now report Server Action requests that fail before running (e.g. upload over the body size limit)
 40. Phase 5 verified - 13 student flows across 4 students in headless Chrome, 14 staff flows, 111 unit tests, 106 API checks, build passes
+41. Fix: use-mobile hook reads the media query with useSyncExternalStore - lint clean
+42. Loading, error and not-found states per role area inside the app shell, plus root and global fallbacks
+43. Fix: pages scrolled horizontally at 768px - app shell content column can shrink; students filters wrap until lg
+44. Fix: sign-in shows "unavailable" instead of "invalid password" when the database is unreachable
+45. Fix: "Not submitted" instead of "Pending" on closed assessments in staff screens too
+46. Phase 6 verified - 18 quality checks (errors, not-found, loading, 4 widths, database down), 15 staff + 13 student flows, 106 API checks, 111 unit tests, build passes

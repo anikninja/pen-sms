@@ -26,7 +26,9 @@ export function AppShell({
         role={session.role}
         user={{ name: session.name, email: session.email }}
       />
-      <SidebarInset>
+      {/* min-w-0: a flex item defaults to its content width, so a wide table would widen the whole page
+          instead of scrolling inside its own container (seen at 768px with the sidebar open). */}
+      <SidebarInset className="min-w-0">
         <SiteHeader title={title} />
         <main className="flex flex-1 flex-col gap-6 p-4 lg:p-6">{children}</main>
       </SidebarInset>

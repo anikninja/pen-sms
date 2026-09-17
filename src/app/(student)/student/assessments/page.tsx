@@ -5,7 +5,6 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { OpenBadge, SubmissionStatusBadge } from "@/components/shared/status-badges"
 import { SubmissionUpload } from "@/components/student/submission-upload"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireStudent } from "@/lib/auth/session"
 import { getStudentAssessments } from "@/lib/services/submissions"
@@ -44,12 +43,7 @@ export default async function StudentAssessmentsPage() {
                   </CardDescription>
                   <CardAction className="flex flex-wrap justify-end gap-2">
                     <OpenBadge isOpen={assessment.isOpen} />
-                    {/* "Pending" would suggest there is still time; a closed, unsubmitted assessment is simply missed. */}
-                    {assessment.status === "PENDING" && !assessment.isOpen ? (
-                      <Badge variant="secondary">Not submitted</Badge>
-                    ) : (
-                      <SubmissionStatusBadge status={assessment.status} />
-                    )}
+                    <SubmissionStatusBadge status={assessment.status} isOpen={assessment.isOpen} />
                   </CardAction>
                 </CardHeader>
                 <CardContent className="space-y-4">

@@ -26,7 +26,17 @@ export type GradeRow = AssessmentSubmissionRow & { overdue: OverdueInfo }
  * Submission status, download and inline grading for one assessment (§22, §23).
  * Classification is previewed as staff type; the server validates and recalculates it.
  */
-export function GradeTable({ assessmentId, assessmentTitle, rows }: { assessmentId: string; assessmentTitle: string; rows: GradeRow[] }) {
+export function GradeTable({
+  assessmentId,
+  assessmentTitle,
+  isOpen,
+  rows,
+}: {
+  assessmentId: string
+  assessmentTitle: string
+  isOpen: boolean
+  rows: GradeRow[]
+}) {
   if (rows.length === 0) {
     return <EmptyState title="No students to grade">No enrolled students in this programme yet.</EmptyState>
   }
@@ -44,7 +54,7 @@ export function GradeTable({ assessmentId, assessmentTitle, rows }: { assessment
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <GradeTableRow key={row.student.id} assessmentId={assessmentId} assessmentTitle={assessmentTitle} row={row} />
+            <GradeTableRow key={row.student.id} assessmentId={assessmentId} assessmentTitle={assessmentTitle} isOpen={isOpen} row={row} />
           ))}
         </TableBody>
       </Table>
@@ -52,7 +62,17 @@ export function GradeTable({ assessmentId, assessmentTitle, rows }: { assessment
   )
 }
 
-function GradeTableRow({ assessmentId, assessmentTitle, row }: { assessmentId: string; assessmentTitle: string; row: GradeRow }) {
+function GradeTableRow({
+  assessmentId,
+  assessmentTitle,
+  isOpen,
+  row,
+}: {
+  assessmentId: string
+  assessmentTitle: string
+  isOpen: boolean
+  row: GradeRow
+}) {
   const saved = row.result?.grade
   const [value, setValue] = useState(saved === undefined ? "" : String(saved))
   const { run, pending, fieldErrors } = useServerAction()
@@ -84,7 +104,7 @@ function GradeTableRow({ assessmentId, assessmentTitle, row }: { assessmentId: s
         </div>
       </TableCell>
       <TableCell className="whitespace-nowrap">
-        <SubmissionStatusBadge status={row.status} />
+        <SubmissionStatusBadge status={row.status} isOpen={isOpen} />
         {row.submission && <div className="mt-1 text-xs text-muted-foreground">{formatDateTime(row.submission.submittedAt)}</div>}
       </TableCell>
       <TableCell>

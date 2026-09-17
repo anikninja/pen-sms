@@ -51,7 +51,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       <form
         key={`${search.q ?? ""}|${search.programme ?? ""}|${search.status ?? ""}`}
         method="get"
-        className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-end"
+        className="flex flex-col gap-3 rounded-lg border p-3 lg:flex-row lg:items-end"
         role="search"
       >
         <div className="flex flex-1 flex-col gap-1.5">
@@ -60,7 +60,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="programme">Programme</Label>
-          <NativeSelect id="programme" name="programme" defaultValue={search.programme ?? ""} className="w-full md:w-56">
+          <NativeSelect id="programme" name="programme" defaultValue={search.programme ?? ""} className="w-full lg:w-56">
             <NativeSelectOption value="">All programmes</NativeSelectOption>
             {programmes.map((programme) => (
               <NativeSelectOption key={programme.id} value={programme.code}>
@@ -71,7 +71,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="status">Status</Label>
-          <NativeSelect id="status" name="status" defaultValue={search.status ?? ""} className="w-full md:w-40">
+          <NativeSelect id="status" name="status" defaultValue={search.status ?? ""} className="w-full lg:w-40">
             <NativeSelectOption value="">All statuses</NativeSelectOption>
             {STATUSES.map((status) => (
               <NativeSelectOption key={status.value} value={status.value}>

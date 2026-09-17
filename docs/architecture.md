@@ -1907,6 +1907,21 @@ Avoid excessive animations and decorative UI.
 
 The evaluator should understand the system immediately.
 
+## 34.1 Loading, Error and Not-Found States
+
+| State | Where | Behaviour |
+|---|---|---|
+| Loading | `loading.tsx` in each role area and on record pages (`students/[id]`, `assessments/[id]`) | Skeleton shaped like a page, inside the app shell, so navigation stays usable |
+| Page error | `error.tsx` in each role area | "Something went wrong" inside the shell, with **Try again** and **Go to dashboard**. Never shows the error message, only the digest as a reference that matches the server log (§33) |
+| Layout or login error | `app/error.tsx` | Same message, full page (e.g. the database is unreachable) |
+| Root layout error | `app/global-error.tsx` | Plain last-resort page |
+| Not found | `not-found.tsx` in each role area, plus `app/not-found.tsx` for unknown URLs | "Page not found" with a link to the role's dashboard (or `/`) |
+| Sign-in while the database is unreachable | Login form | "Sign-in is unavailable right now. Please try again in a moment." — not "Invalid email or password" |
+
+A record page that calls `notFound()` after the shell has started streaming keeps HTTP status 200; Next.js marks it `noindex`. The JSON API returns a real 404.
+
+Layout must not scroll horizontally at 375, 768, 1024 and 1280 px. Wide tables scroll inside their own container; from 768 px the sidebar takes 256 px, so multi-column filter rows start at `lg`.
+
 ---
 
 # 35. Dashboard Status Semantics

@@ -38,7 +38,9 @@ const SUBMISSION: Record<SubmissionStatus, { label: string; variant: Variant }> 
   PENDING: { label: "Pending", variant: "outline" },
 }
 
-export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) {
+/** Pass isOpen where it is known: "Pending" would suggest there is still time on a closed assessment. */
+export function SubmissionStatusBadge({ status, isOpen }: { status: SubmissionStatus; isOpen?: boolean }) {
+  if (status === "PENDING" && isOpen === false) return <Badge variant="secondary">Not submitted</Badge>
   const { label, variant } = SUBMISSION[status]
   return <Badge variant={variant}>{label}</Badge>
 }

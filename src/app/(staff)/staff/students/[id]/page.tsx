@@ -148,7 +148,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{formatDateTime(assessment.submissionDeadline)}</TableCell>
                 <TableCell>
-                  <SubmissionStatusBadge status={assessment.status} />
+                  <SubmissionStatusBadge status={assessment.status} isOpen={assessment.isOpen} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {assessment.submission ? formatDateTime(assessment.submission.submittedAt) : "—"}

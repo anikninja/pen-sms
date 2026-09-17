@@ -12,7 +12,7 @@ specification. One-line history: [development_log.md](development_log.md).
 | 3 — Domain Logic and API | ✅ Done |
 | 4 — Staff UI | ✅ Done |
 | 5 — Student UI | ✅ Done |
-| 6 — Quality | ⬜ Not started |
+| 6 — Quality | ✅ Done |
 | 7 — Submission | ⬜ Not started |
 
 ---
@@ -242,7 +242,44 @@ Screenshots were reviewed; one wording issue found and fixed ("Pending" on a clo
 
 ---
 
-## Phase 6 — Quality ⬜
+## Phase 6 — Quality ✅
+
+Spec: architecture.md §25.1, §33, §34, §34.1.
+
+- [x] **Edge cases (§25.1)** — every message audited against the code; all present (the under-15 and past-deadline cases are built in a refine and a create warning). Covered by the API end-to-end checks
+- [x] **Loading states** — `loading.tsx` in `/staff`, `/student`, `students/[id]` and `assessments/[id]`; `PageSkeleton` renders inside the app shell
+- [x] **Error boundaries** — `error.tsx` per role area (inside the shell), `app/error.tsx` (login and layout failures), `app/global-error.tsx`. The error message is never shown; the digest is shown as a reference
+- [x] **Not found** — `not-found.tsx` per role area (inside the shell, link to the role's dashboard) and `app/not-found.tsx` for unknown URLs
+- [x] **Empty states, confirmation dialogs, toasts** — already in place from Phases 4–5; no gaps found
+- [x] **Consistent formatting** — all money and dates go through `src/lib/utils/format.ts`; no ad-hoc `toLocale*` in components
+- [x] **Consistent status labels** — `SubmissionStatusBadge` takes `isOpen`: "Not submitted" instead of "Pending" on a closed assessment, on the staff grade table, results page, student record and student portal
+- [x] **Responsive** — no horizontal scroll at 375 / 768 / 1024 / 1280 px on every staff and student page
+- [x] **Lint clean** — `use-mobile.ts` rewritten with `useSyncExternalStore`; `eslint .` reports 0 problems
+
+### Verified — 2026-09-17
+
+**Real browser** — headless Chrome against `next build` + `next start`, with two temporary pages that throw or wait 3 s (removed before the final build), plus a second server whose `DATABASE_URL` points at a closed port: **18 of 18 checks pass**.
+
+| Check | Result |
+|---|---|
+| Staff page throws | Error card inside the shell; "Reference: <digest>"; thrown message (with a fake connection string) absent from the HTML; **Try again** re-renders; **Go to dashboard** recovers |
+| Student page throws | Same, inside the student shell; link goes to `/student/dashboard` |
+| `/staff/students/not-a-uuid` and an unknown UUID | "Page not found" inside the shell, page marked `noindex`; `/api/students/<id>` → 404 |
+| Unknown URL | Root "Page not found"; **Go to home** → role dashboard |
+| Client navigation to a slow page | Skeleton inside the shell within 2.5 s, replaced by the page |
+| 375 / 768 / 1024 / 1280 px | No horizontal scroll on 10 staff pages (incl. a student record, edit form, assessment) and 4 student pages |
+| 375 px sidebar | Hidden; header button opens it as a sheet |
+| Database unreachable, signed in | Root error page; no Prisma error, host or port in the HTML (server log keeps the full error) |
+| Database unreachable, sign in | "Sign-in is unavailable right now…" |
+
+**Regression (final build, fresh seed each run):** staff walkthrough **15/15** · student walkthrough **13/13** · API end-to-end **106 passed, 0 failed** · `npm test` **111 passed** · `tsc` clean · `eslint .` 0 problems · `npm run build` passes.
+
+### Fixes found while building this phase
+
+- **Pages scrolled horizontally at 768 px.** `SidebarInset` is a flex item without `min-w-0`, so a wide table widened the whole page instead of scrolling in its container. Added `min-w-0`; the students filter row now switches to one line at `lg` (the sidebar leaves ~480 px at 768 px).
+- **Sign-in blamed the password when the database was down.** Any `AuthError` showed "Invalid email or password."; only `CredentialsSignin` does now, other failures show "Sign-in is unavailable right now" and are logged.
+- **"Pending" on closed assessments for staff.** Phase 5 fixed the label for students only; moved into the shared badge.
+
 
 ## Phase 7 — Submission ⬜
 
@@ -250,10 +287,9 @@ Screenshots were reviewed; one wording issue found and fixed ("Pending" on a clo
 
 ## Open items
 
-- `src/hooks/use-mobile.ts` (shadcn-generated) fails the `react-hooks/set-state-in-effect` lint rule. Doesn't block the build; fix with `useSyncExternalStore` (Phase 6).
 - Student list has no pagination (fine for the demo data size).
 - Deadlines in the JSON API must include a time zone (the staff form converts `datetime-local` as Dhaka time).
-- Loading states (`loading.tsx`) and error boundaries per route group are not added yet (Phase 6).
+- A record page that is not found returns HTTP 200 (the shell streams first; Next.js adds `noindex`). The JSON API returns 404. Accepted: the loading states are worth more than the page status in a signed-in app.
 - The staff UI was checked in headless Chrome, not by hand in a desktop browser; keyboard-only navigation of dialogs is untested.
 - Seed assumes a fresh database for submissions: if a student replaced a seeded file through the app, re-seeding points the row back at the seed file and leaves the uploaded file orphaned.
 
