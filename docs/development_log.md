@@ -49,3 +49,4 @@ One line per completed step, oldest first. Details live in [PROGRESS.md](PROGRES
 44. Fix: sign-in shows "unavailable" instead of "invalid password" when the database is unreachable
 45. Fix: "Not submitted" instead of "Pending" on closed assessments in staff screens too
 46. Phase 6 verified - 18 quality checks (errors, not-found, loading, 4 widths, database down), 15 staff + 13 student flows, 106 API checks, 111 unit tests, build passes
+47. Prisma Postgres (console.prisma.io) as the hosted database on Prisma 6 - db:deploy script, .env.example note; Prisma 8 rewrite declined

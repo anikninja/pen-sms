@@ -384,3 +384,16 @@ Base UI logs this in development when a mounted `Input` receives a different `de
 | Adjust fee dialog (intermittent) | a save refreshed the fee before the dialog closed | dialog forms are separate components that mount on open and freeze their defaults (`useInitialValue`); same for Record payment, Assessment and the edit-student form |
 
 **Verified:** 10 scenarios × 3 runs against `next dev` → 0 warnings; Clear and sidebar navigation reset the filters; reopening Adjust fee shows the newly saved fee. Regression: 111 unit tests, 14/14 staff browser flows on the production build.
+
+### 2026-09-17 — Hosted database on Prisma Postgres (stay on Prisma 6)
+
+The Prisma Console refuses "Deploy from GitHub" for this repository because its deploys need Prisma 8. Prisma 8 (8.0.0-rc.15) is a new ORM, not a version bump: `contract.prisma` instead of `schema.prisma`, a new query API instead of `@prisma/client`, `Temporal` dates, and deploys as a Composer app on Bun with uploads in a bucket.
+
+| Decision | Why |
+|---|---|
+| Keep Prisma 6.12; use console.prisma.io for the **database only** | Prisma Postgres is standard PostgreSQL behind a connection string, so the tested data layer, locks and migrations work unchanged. A Prisma 8 rewrite on a release candidate is too risky before submission |
+| Use the **direct** `postgres://` connection string | `prisma migrate deploy` and the row/advisory locks need a normal PostgreSQL connection, not an Accelerate (`prisma+postgres://`) URL |
+| `npm run db:deploy` (`prisma migrate deploy`) then `npm run db:seed` | Applies committed migrations without resetting; the seed only upserts |
+| Run the seed where the app runs | The seed also writes the sample submission files to `storage/uploads` on that machine |
+
+**Verified:** on a new empty PostgreSQL database, `db:deploy` applied both migrations, the seed ran twice without duplicates (7 users, 6 students, 2 programmes, 6 fees, 6 payments, 4 assessments, 6 submissions, 7 results), and `prisma migrate status` reported the schema up to date. Not yet run against a real Prisma Postgres database.
