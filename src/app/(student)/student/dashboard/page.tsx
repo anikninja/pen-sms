@@ -107,7 +107,7 @@ export default async function StudentDashboardPage() {
         </Card>
       </div>
 
-      <Card className="max-w-3xl">
+      <Card className="max-w-full">
         <CardHeader>
           <CardTitle>Enrolment details</CardTitle>
         </CardHeader>
