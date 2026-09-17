@@ -13,7 +13,7 @@ specification. One-line history: [development_log.md](development_log.md).
 | 4 — Staff UI | ✅ Done |
 | 5 — Student UI | ✅ Done |
 | 6 — Quality | ✅ Done |
-| 7 — Submission | ⬜ Not started |
+| 7 — Submission | ✅ Done |
 
 ---
 
@@ -281,12 +281,47 @@ Spec: architecture.md §25.1, §33, §34, §34.1.
 - **"Pending" on closed assessments for staff.** Phase 5 fixed the label for students only; moved into the shared badge.
 
 
-## Phase 7 — Submission ⬜
+## Phase 7 — Submission ✅
+
+Spec: architecture.md §37 (README), §38 (AI usage), §40 (definition of done).
+
+- [x] **README** rewritten in the §37 order: overview, staff and student features, architecture (layer diagram, ERD, JSON API table, working curl examples), stack, prerequisites, environment variables, local setup, migrations, seed data, demo accounts, business rules, design decisions, edge cases, testing, AI usage, known limitations
+- [x] **AI usage** documented: tool, what it was used for, how output was reviewed, and concrete problems that review caught
+- [x] **`.env.example` checked against the code** — `DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE` are the only variables read anywhere
+- [x] **No secrets or the brief PDF in the repository**, in the working tree or in git history
+- [x] **Definition of done** (architecture.md §40) ticked off against verified behaviour
+- [x] Submission is the git repository itself; no deployment (decided 2026-09-18). Docker files stay as they are until they can be tested
+
+### Verified — 2026-09-18 (fresh clone, following the README)
+
+The repository was cloned to a new directory and set up **only** by following the README, against a brand-new database:
+
+| Step | Result |
+|---|---|
+| `npm install` | 0 vulnerabilities; Prisma Client generated (see the fix below) |
+| `.env` from `.env.example` | Worked with only `DATABASE_URL` and `AUTH_SECRET` filled in |
+| `npm run db:deploy` | Both migrations applied to the empty database |
+| `npm run db:seed` | Demo data loaded; re-running it changed nothing |
+| `npm run lint` · `npm test` · `npm run build` | 0 problems · 111 passed · build clean |
+| README curl examples, copied verbatim | Sign-in, student search, fee summary, payment (201), grade, publish, student assessment list, upload (201) and marksheet all returned the documented shapes |
+| `npm run test:e2e` | 106 passed, 0 failed |
+| Staff browser walkthrough | 15/15 |
+| Student browser walkthrough | 13/13 |
+
+Afterwards the test database was dropped and the clone deleted.
+
+### Fix found while building this phase
+
+- **A fresh clone could not seed.** `npm install` did not generate Prisma Client, so `npm run db:seed` failed with "@prisma/client did not initialize yet". CI hid this behind an explicit generate step. Added `"postinstall": "prisma generate"`. **Docker note:** the current `Dockerfile` runs `npm install` before copying `prisma/`, so that build will now fail on the generate step — the Dockerfile needs `prisma/` and `prisma.config.ts` copied before install when it is next worked on.
+
+---
+
 
 ---
 
 ## Open items
 
+- The Docker setup (`Dockerfile`, `docker-compose.yml`) is unverified, and `npm install` now needs `prisma/` present (see the Phase 7 fix). To be done on a machine with Docker.
 - Student list has no pagination (fine for the demo data size).
 - Deadlines in the JSON API must include a time zone (the staff form converts `datetime-local` as Dhaka time).
 - A record page that is not found returns HTTP 200 (the shell streams first; Next.js adds `noindex`). The JSON API returns 404. Accepted: the loading states are worth more than the page status in a signed-in app.

@@ -2103,41 +2103,43 @@ The assessment explicitly states that this is not a full platform.
 
 The application is considered complete when:
 
+*Every box below was verified against a running build on seeded data; the verification runs are recorded in [PROGRESS.md](PROGRESS.md) (last: fresh clone, 2026-09-18).*
+
 ### Student Enrolment
 
-- [ ] Staff can create students.
-- [ ] Student ID is automatically generated.
-- [ ] Student ID is unique.
-- [ ] Students can be searched.
-- [ ] Students can be filtered.
-- [ ] Status works.
+- [x] Staff can create students.
+- [x] Student ID is automatically generated.
+- [x] Student ID is unique.
+- [x] Students can be searched.
+- [x] Students can be filtered.
+- [x] Status works.
 
 ### Fees
 
-- [ ] Programme fees exist.
-- [ ] A fee is assigned to each student from the programme tariff and can be adjusted.
-- [ ] Payments can be recorded.
-- [ ] Outstanding balance is calculated.
-- [ ] Overdue students are identified.
+- [x] Programme fees exist.
+- [x] A fee is assigned to each student from the programme tariff and can be adjusted.
+- [x] Payments can be recorded.
+- [x] Outstanding balance is calculated.
+- [x] Overdue students are identified.
 
 ### Assessments
 
-- [ ] Staff can create assessments for a programme.
-- [ ] Staff can open and close assessments.
-- [ ] Students can submit PDF/DOCX.
-- [ ] One active submission per student/assessment.
-- [ ] Resubmission before deadline works.
-- [ ] Resubmission after deadline is rejected.
-- [ ] Late submissions are accepted.
-- [ ] Late submissions are visibly flagged.
+- [x] Staff can create assessments for a programme.
+- [x] Staff can open and close assessments.
+- [x] Students can submit PDF/DOCX.
+- [x] One active submission per student/assessment.
+- [x] Resubmission before deadline works.
+- [x] Resubmission after deadline is rejected.
+- [x] Late submissions are accepted.
+- [x] Late submissions are visibly flagged.
 
 ### Results
 
-- [ ] Staff can enter grades.
-- [ ] Grades are validated 0–100.
-- [ ] Classification is calculated.
-- [ ] Staff can publish/withhold results per result and per student.
-- [ ] Students only see published results.
+- [x] Staff can enter grades.
+- [x] Grades are validated 0–100.
+- [x] Classification is calculated.
+- [x] Staff can publish/withhold results per result and per student.
+- [x] Students only see published results.
 
 ### Authentication
 
@@ -2147,17 +2149,17 @@ The application is considered complete when:
 
 ### Engineering
 
-- [ ] PostgreSQL is used.
-- [ ] Prisma is used.
-- [ ] Prisma schema is committed.
-- [ ] JSON API routes work and share the service layer with Server Actions.
-- [ ] No mocked application data.
-- [ ] Seed data works.
-- [ ] Error handling exists.
-- [ ] README is complete.
-- [ ] `.env.example` exists.
-- [ ] AI usage is documented.
-- [ ] Code is committed to GitHub.
+- [x] PostgreSQL is used.
+- [x] Prisma is used.
+- [x] Prisma schema is committed.
+- [x] JSON API routes work and share the service layer with Server Actions.
+- [x] No mocked application data.
+- [x] Seed data works.
+- [x] Error handling exists.
+- [x] README is complete.
+- [x] `.env.example` exists.
+- [x] AI usage is documented.
+- [x] Code is committed to GitHub.
 
 ---
 
