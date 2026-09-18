@@ -3,6 +3,8 @@
 A Student Management System for a university **Registry team**, built with Next.js 16, PostgreSQL and Prisma for the PEN Global technical assessment. Registry staff manage students, fees, assessments and results. Students sign in to see their own fees, submit coursework and read their published results.
 
 > Full technical documentation (architecture, API, business rules, design decisions, edge cases, testing): **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**
+>
+> Illustrated staff and student usage guide (PDF, 17 slides): **[docs/PEN-SMS-Usage-Guide.pdf](docs/PEN-SMS-Usage-Guide.pdf)**
 
 ---
 
@@ -17,6 +19,20 @@ Staff enrol students (each gets an automatic Student ID such as `SMS-2026-0001`)
 - **Node.js 22** and npm
 - **PostgreSQL** (version 16 is used in CI), running locally or hosted
 - Git
+
+---
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | yes | PostgreSQL connection string, e.g. `postgresql://postgres:YOUR_PASSWORD@localhost:5432/pen_sms?schema=public` |
+| `AUTH_SECRET` | yes | Random secret that signs the login session. Generate one with `npx auth secret` or `openssl rand -base64 32` |
+| `DEMO_MODE` | no | `"true"` shows the demo accounts and password on the login page |
+
+`.env` is gitignored; never commit it.
 
 ---
 
@@ -150,6 +166,19 @@ Sign in as a student, e.g. `rahim.uddin@student.pensms.test`.
 | **See your results** | **Marksheet** lists your published results with their classification. Results the Registry has not published yet are not shown |
 
 If an upload is not possible, the assessment card explains why: the assessment is closed, you are not currently enrolled, or the deadline for replacing has passed.
+
+---
+
+## AI usage
+
+**Claude Code** (Anthropic) was used throughout the build as an engineering assistant:
+
+- **Requirements review** — checked the architecture document against the brief line by line and found gaps (e.g. no per-student fee, assessments not linked to a programme) that became documented design decisions.
+- **Implementation** — scaffolded the schema, services, API routes and screens phase by phase from the architecture document.
+- **Testing** — generated unit tests for boundary cases, an end-to-end API test script and browser walkthroughs.
+- **Review and documentation** — suggested edge cases, reviewed code, and drafted the docs.
+
+I made the product and security decisions, and every change was reviewed, run and tested before it was committed. That testing caught real problems — duplicate Student IDs under concurrent enrolment, fees flagged overdue a day early, layout overflow on tablets — which were then fixed. Full details: [docs/DOCUMENTATION.md → AI usage](docs/DOCUMENTATION.md#14-ai-usage).
 
 ---
 

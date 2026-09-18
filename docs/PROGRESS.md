@@ -320,6 +320,51 @@ Afterwards the test database was dropped and the clone deleted.
 
 ---
 
+## Final check against the brief — 2026-09-18
+
+Every requirement in the assessment brief, checked against a **fresh clone of `5b260a8`** (new database, set up from the README): `npm install` → `db:deploy` → `db:seed` twice → lint 0 problems → **111** unit tests → build → **106/0** API checks → staff browser walkthrough **15/15** → student walkthrough **13/13**.
+
+| Brief requirement | Status | Evidence |
+|---|---|---|
+| Create student: full name, email, date of birth, programme, academic year, enrolment status | ✅ | New student form; `POST /api/students`; staff walkthrough |
+| Auto-generated unique Student ID (`SMS-YYYY-NNNN`) | ✅ | Unique constraint + per-year lock; concurrent-enrolment API check |
+| Statuses Enrolled, Deferred, Withdrawn, Completed | ✅ | `EnrolmentStatus` enum; seed has all but Withdrawn, which the form offers |
+| Search and filter by name, ID, programme, status | ✅ | Students page (server-side query); API checks |
+| Fee per student based on programme | ✅ | Copied from the programme tariff at enrolment; adjustable |
+| Record payment: amount, date, reference | ✅ | Record payment dialog; `POST …/payments` |
+| Outstanding balance in real time | ✅ | Calculated on every read, never stored |
+| Overdue students flagged on the Registry dashboard | ✅ | Overdue Students card and Overdue Fees list |
+| Staff create assessment: title, module, deadline | ✅ | New assessment dialog (plus programme) |
+| Students upload PDF/DOCX against an open assessment | ✅ | Upload with type/size checks; closed assessments refuse |
+| One submission per student; resubmission before the deadline | ✅ | Unique (student, assessment); replacement blocked after the deadline |
+| Late submissions accepted, visually flagged | ✅ | `isLate`; **Late** badge for staff and student |
+| Numeric grade 0–100 per student per assessment | ✅ | Inline grading; validation and DB check |
+| Pass ≥ 40, Merit ≥ 60, Distinction ≥ 70 | ✅ | Unit-tested at every boundary |
+| Publish or withhold per student | ✅ | Per result, per student marksheet, per assessment |
+| Students see results only after publishing | ✅ | Filtered in the query; absent from HTML and RSC payload |
+| GitHub repo, all code committed, no zip files | ✅ | 0 archives tracked; working tree clean |
+| Seed: ≥ 5 students, 2 programmes, fees, sample grades | ✅ | 6 students, 2 programmes, 6 fees, 6 payments, 7 grades |
+| Staff view and Student view | ✅ | Real sign-in; each role blocked from the other's pages and APIs |
+| Next.js 14+ App Router | ✅ | Next.js 16.3 |
+| PostgreSQL + Prisma, `schema.prisma` committed | ✅ | |
+| Tailwind / shadcn | ✅ | Tailwind 4, shadcn/ui |
+| No other backend framework | ✅ | Server Actions + Route Handlers only |
+| No mocked data in `useState` | ✅ | Every screen reads PostgreSQL |
+| `.env` example, no credentials committed | ✅ | `.env.example` has placeholders; no `.env` or PDF in history. The CI file holds only the throwaway CI database password |
+| README: how to run locally | ✅ | "Project setup - Local deployment" |
+| **README: your `.env` variables** | ✅ (restored) | Removed from README.md in `5b260a8`; restored the same day as an "Environment variables" table (`DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE`) |
+| **README: short section on AI usage** (15 % of the grade) | ✅ (restored) | Removed from README.md in `5b260a8`; restored the same day as a short "AI usage" section linking to `docs/DOCUMENTATION.md` §14 |
+
+### Result
+
+The two README gaps found by this check were closed the same day. **Every requirement in the brief is met.**
+
+### Usage guide (PDF)
+
+`docs/PEN-SMS-Usage-Guide.pdf` — 17 slides: title, run and sign in, staff manual (dashboard, find and enrol students, record payments, fees overview, assessments, grading, publishing with the overdue warning), student manual (dashboard, fees, submitting and replacing coursework, marksheet), and the rules at a glance. Screenshots were taken from a freshly seeded production build of `5b260a8`; dialogs were opened and cancelled, so no demo data was changed. Linked from the README.
+
+---
+
 ## Open items
 
 - Student list has no pagination (fine for the demo data size).
