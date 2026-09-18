@@ -311,13 +311,6 @@ Copy `.env.example` to `.env`. `.env` is gitignored; never commit it.
 
 ## 6. Local setup
 
-The project runs in two ways:
-
-- **A. Locally with `npm run dev`** — described here, and the way to review the assessment.
-- **B. With Docker on a VPS** — `Dockerfile` and `docker-compose.yml` are included but **not yet verified**; see the note at the end of this section.
-
-### A. Local (`npm run dev`)
-
 ```bash
 # 1. Clone and install
 git clone https://github.com/anikninja/pen-sms.git
@@ -335,20 +328,17 @@ createdb pen_sms        # or: psql -U postgres -c "CREATE DATABASE pen_sms;"
 npm run db:deploy
 npm run db:seed
 
-# 5. Start
+# 5. Start — production build (recommended for review)
+npm run build
+npm run start
+
+#    or, for development with hot reload
 npm run dev
 ```
 
 Open <http://localhost:3000> and sign in with a [demo account](#9-demo-accounts-and-sign-in).
 
-For a production build locally: `npm run build` then `npm run start`.
-
-### B. Docker (VPS) — not yet verified
-
-`docker-compose.yml` defines a PostgreSQL 16 service and the app. This setup has **not been built or run yet**, and the files need changes before it will work — the open list is [docs/TODO.md](docs/TODO.md). Two things any server deployment needs:
-
-- **Persistent storage for `storage/uploads/`** — uploaded submissions are saved there.
-- **Run `npm run db:deploy` and `npm run db:seed` on the server itself** — the seed also writes the sample submission files to that machine's `storage/uploads/`.
+Uploaded submissions (and the seed's sample PDFs) are saved in `storage/uploads/`, which is gitignored.
 
 ---
 
@@ -556,4 +546,4 @@ AI was used throughout as an engineering assistant. The architecture, business r
 - **No pagination** on the students list (fine for the demo data size).
 - A record page that is not found shows "Page not found" with HTTP status 200 (Next.js streaming; the page is marked `noindex`). The JSON API returns a real 404.
 - `next-auth` v5 is a beta release (pinned to an exact version).
-- The Docker setup is included but not yet verified; see [docs/TODO.md](docs/TODO.md).
+- No deployment configuration is included: the app is run locally with `npm run start` (or `npm run dev`).

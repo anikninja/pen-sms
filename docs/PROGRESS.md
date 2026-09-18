@@ -1,7 +1,7 @@
 # Build Progress
 
 Live status of the build. Phases follow [architecture.md](architecture.md) §41, which is the single
-specification. One-line history: [development_log.md](development_log.md). Deferred work: [TODO.md](TODO.md).
+specification. One-line history: [development_log.md](development_log.md).
 
 **Update this file after every completed piece of work** (architecture.md §2.4).
 
@@ -290,7 +290,7 @@ Spec: architecture.md §37 (README), §38 (AI usage), §40 (definition of done).
 - [x] **`.env.example` checked against the code** — `DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE` are the only variables read anywhere
 - [x] **No secrets or the brief PDF in the repository**, in the working tree or in git history
 - [x] **Definition of done** (architecture.md §40) ticked off against verified behaviour
-- [x] Submission is the git repository itself; no deployment (decided 2026-09-18). Docker files stay as they are until they can be tested
+- [x] Submission is the git repository itself; reviewers run it locally with `npm run build` + `npm run start` (or `npm run dev`). No deployment and no Docker setup (the Docker files and their TODO were removed on 2026-09-18)
 
 ### Verified — 2026-09-18 (fresh clone, following the README)
 
@@ -312,7 +312,7 @@ Afterwards the test database was dropped and the clone deleted.
 
 ### Fix found while building this phase
 
-- **A fresh clone could not seed.** `npm install` did not generate Prisma Client, so `npm run db:seed` failed with "@prisma/client did not initialize yet". CI hid this behind an explicit generate step. Added `"postinstall": "prisma generate"`. **Docker note:** the current `Dockerfile` runs `npm install` before copying `prisma/`, so that build will now fail on the generate step — the Dockerfile needs `prisma/` and `prisma.config.ts` copied before install when it is next worked on.
+- **A fresh clone could not seed.** `npm install` did not generate Prisma Client, so `npm run db:seed` failed with "@prisma/client did not initialize yet". CI hid this behind an explicit generate step. Added `"postinstall": "prisma generate"`. If Docker is added later, copy `prisma/` and `prisma.config.ts` into the image **before** `npm install`, because the install step now runs `prisma generate`.
 
 ---
 
@@ -321,7 +321,6 @@ Afterwards the test database was dropped and the clone deleted.
 
 ## Open items
 
-- The Docker setup (`Dockerfile`, `docker-compose.yml`) has never been built or run. Known blockers and the full checklist are in [TODO.md](TODO.md); to be done on a machine with Docker.
 - Student list has no pagination (fine for the demo data size).
 - Deadlines in the JSON API must include a time zone (the staff form converts `datetime-local` as Dhaka time).
 - A record page that is not found returns HTTP 200 (the shell streams first; Next.js adds `noindex`). The JSON API returns 404. Accepted: the loading states are worth more than the page status in a signed-in app.
