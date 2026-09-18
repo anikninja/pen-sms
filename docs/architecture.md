@@ -381,7 +381,7 @@ For this MVP:
 overdue = today (Dhaka) > studentFee.dueDate AND outstandingBalance > 0
 ```
 
-Document this as an explicit product decision in the README.
+Document this as an explicit product decision in `docs/DOCUMENTATION.md`.
 
 ---
 
@@ -1856,7 +1856,7 @@ export interface FileStorage {
 
 ### Limitation
 
-Local disk does not persist on serverless hosts such as Vercel. The README must say so.
+Local disk does not persist on serverless hosts such as Vercel. `docs/DOCUMENTATION.md` (Known limitations) must say so.
 
 ---
 
@@ -2015,7 +2015,12 @@ Access rules (published results only, own data only, role areas), every JSON API
 
 # 37. README Requirements
 
-The final README should contain, in this order:
+The documentation is split in two (decided 2026-09-18):
+
+- **`README.md`** — short, for someone running and using the app: introduction, features (one paragraph), prerequisites, environment variables, local setup with `npm run start`, database setup and migrations, seed data and what each seeded student shows, demo accounts, staff and student usage manuals, a short AI usage note, and project ownership.
+- **`docs/DOCUMENTATION.md`** — the full reference, containing the sections below.
+
+`docs/DOCUMENTATION.md` should contain, in this order:
 
 ```text
 1.  Project Overview
@@ -2036,7 +2041,7 @@ The final README should contain, in this order:
 16. Known Limitations — local file storage on serverless hosts, no registration / password reset / rate limiting, no submission version history, no partial-payment schedule
 ```
 
-The assessment explicitly requires local setup instructions, `.env` variables, and a short explanation of AI usage.
+The assessment explicitly requires local setup instructions, `.env` variables, and a short explanation of AI usage — all three are in `README.md` itself; the AI usage note links to the full section in `docs/DOCUMENTATION.md`.
 
 ---
 

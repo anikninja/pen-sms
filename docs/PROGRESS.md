@@ -286,6 +286,7 @@ Spec: architecture.md §25.1, §33, §34, §34.1.
 Spec: architecture.md §37 (README), §38 (AI usage), §40 (definition of done).
 
 - [x] **README** rewritten in the §37 order: overview, staff and student features, architecture (layer diagram, ERD, JSON API table, working curl examples), stack, prerequisites, environment variables, local setup, migrations, seed data, demo accounts, business rules, design decisions, edge cases, testing, AI usage, known limitations
+- [x] **README split (2026-09-18):** the detailed README moved to `docs/DOCUMENTATION.md` (links adjusted); `README.md` is now a short guide — introduction, features, prerequisites, environment variables, setup with `npm run start`, database, seed data, demo accounts, staff and student usage manuals, AI usage note, ownership. architecture.md §37 updated. The curl examples verified below now live in `docs/DOCUMENTATION.md`
 - [x] **AI usage** documented: tool, what it was used for, how output was reviewed, and concrete problems that review caught
 - [x] **`.env.example` checked against the code** — `DATABASE_URL`, `AUTH_SECRET`, `DEMO_MODE` are the only variables read anywhere
 - [x] **No secrets or the brief PDF in the repository**, in the working tree or in git history
