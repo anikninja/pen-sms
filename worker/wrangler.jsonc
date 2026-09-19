@@ -26,8 +26,17 @@
     }
   ],
 
+  "r2_buckets": [
+    {
+      // Submission files. The bucket stays private: no r2.dev URL, no custom domain, no public
+      // access. Objects are only read or written through this Worker (src/storage.ts).
+      "binding": "FILES",
+      "bucket_name": "inxapp-sms-files"
+    }
+  ],
+
   "vars": {
-    // Browser origins allowed to call the Worker directly (file uploads). Comma-separated.
+    // Browser origins allowed to upload files to the Worker directly (CORS). Comma-separated.
     "ALLOWED_ORIGINS": "http://localhost:3000"
   }
 }

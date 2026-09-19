@@ -1,7 +1,7 @@
 /**
- * Seeds the Worker's LOCAL D1 database (wrangler's state in worker/.wrangler) with the demo data of
- * prisma/d1/seed.ts, through @prisma/adapter-d1 — so dates are stored exactly as the Worker stores
- * them. Never touches PostgreSQL, a remote D1 database or R2.
+ * Seeds the Worker's LOCAL D1 database and LOCAL R2 bucket (wrangler's state in worker/.wrangler)
+ * with the demo data of prisma/d1/seed.ts, through @prisma/adapter-d1 — so dates are stored exactly
+ * as the Worker stores them. Never touches PostgreSQL or anything in Cloudflare.
  *
  *   npm --prefix worker run db:migrate:local
  *   npm --prefix worker run db:seed:local
@@ -16,7 +16,7 @@ import { PrismaClient } from ".prisma/client-d1"
 import { seedD1 } from "../../prisma/d1/seed"
 
 async function main() {
-  const proxy = await getPlatformProxy<{ DB: D1Database }>({
+  const proxy = await getPlatformProxy<{ DB: D1Database; FILES: R2Bucket }>({
     configPath: path.join(__dirname, "..", "wrangler.jsonc"),
     // Local only: never connect bindings to Cloudflare from this script.
     remoteBindings: false,
@@ -24,8 +24,11 @@ async function main() {
   const db = new PrismaClient({ adapter: new PrismaD1(proxy.env.DB) })
   try {
     const { counts, files } = await seedD1(db)
+    for (const file of files) {
+      await proxy.env.FILES.put(file.key, file.bytes, { httpMetadata: { contentType: "application/pdf" } })
+    }
     console.log("Seeded the local D1 database:", counts)
-    console.log(`${files.length} submission files are returned by the seed; R2 uploads come with file storage (Phase 5).`)
+    console.log(`Put ${files.length} submission files into the local R2 bucket.`)
   } finally {
     await db.$disconnect()
     await proxy.dispose()

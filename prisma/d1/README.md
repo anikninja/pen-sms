@@ -95,7 +95,7 @@ These facts were measured with the real stack: wrangler's local D1, adapter 6.12
 
 ## Seed
 
-- `prisma/d1/seed.ts` exports `seedD1(db)`. It loads the same demo data as `prisma/seed.ts`, with money in minor units, and is idempotent. It never reads `DATABASE_URL` and uses no transactions. It returns the submission PDFs, which are not written here; R2 is a later phase. Keep its data in step with `prisma/seed.ts`.
+- `prisma/d1/seed.ts` exports `seedD1(db)`. It loads the same demo data as `prisma/seed.ts`, with money in minor units, and is idempotent. It never reads `DATABASE_URL` and uses no transactions. It returns the submission PDFs under fixed R2 keys (`submissions/<id>/0-seed.pdf`); the caller puts them into R2. Keep its data in step with `prisma/seed.ts`.
 - **Real D1:** run `seedD1` through the D1 adapter, because of the DateTime encoding. Locally: `npm --prefix worker run db:seed:local`, which seeds wrangler's local D1 through the adapter.
 - **Local try-out:**
   ```sh

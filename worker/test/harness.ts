@@ -67,33 +67,56 @@ async function migrate(dir: string) {
   })
 }
 
-/** Runs `work` against the local D1 through @prisma/adapter-d1 (Node side), then releases the database. */
-export async function withAdapterDb<T>(dir: string, work: (db: D1Client) => Promise<T>): Promise<T> {
-  const proxy = await getPlatformProxy<{ DB: D1Database }>({
+/** Runs `work` against the local D1 (through @prisma/adapter-d1, Node side) and R2, then releases them. */
+export async function withLocalBindings<T>(dir: string, work: (bindings: { db: D1Client; files: R2Bucket }) => Promise<T>): Promise<T> {
+  const proxy = await getPlatformProxy<{ DB: D1Database; FILES: R2Bucket }>({
     configPath: CONFIG,
     persist: { path: path.join(dir, "v3") },
     remoteBindings: false,
   })
   const db = new PrismaClient({ adapter: new PrismaD1(proxy.env.DB) })
   try {
-    return await work(db)
+    return await work({ db, files: proxy.env.FILES })
   } finally {
     await db.$disconnect()
     await proxy.dispose()
   }
 }
 
+export const withAdapterDb = <T>(dir: string, work: (db: D1Client) => Promise<T>) => withLocalBindings(dir, ({ db }) => work(db))
+
+/** Every object key in the local R2 bucket. */
+export async function listObjects(files: R2Bucket): Promise<string[]> {
+  const keys: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = await files.list({ cursor })
+    keys.push(...page.objects.map((object) => object.key))
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  return keys.sort()
+}
+
 export async function startTestWorker(
-  options: { migrate?: boolean; seed?: boolean; secret?: string | null; prepare?: (db: D1Client) => Promise<void> } = {}
+  options: {
+    migrate?: boolean
+    seed?: boolean
+    secret?: string | null
+    /** Extra data, written through the adapter (and to R2) before the Worker starts. */
+    prepare?: (db: D1Client, files: R2Bucket) => Promise<void>
+  } = {}
 ): Promise<TestWorker> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "pen-sms-worker-"))
   if (options.migrate !== false) await migrate(dir)
 
   const users = new Map<string, SeededUser>()
   if (options.seed || options.prepare) {
-    await withAdapterDb(dir, async (db) => {
-      if (options.seed) await seedD1(db)
-      if (options.prepare) await options.prepare(db)
+    await withLocalBindings(dir, async ({ db, files }) => {
+      if (options.seed) {
+        const seeded = await seedD1(db)
+        for (const file of seeded.files) await files.put(file.key, file.bytes, { httpMetadata: { contentType: "application/pdf" } })
+      }
+      if (options.prepare) await options.prepare(db, files)
       for (const user of await db.user.findMany({ select: { id: true, email: true, role: true, studentId: true } })) {
         users.set(user.email, user)
       }

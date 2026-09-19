@@ -3,7 +3,8 @@
  * check the role → run the handler → map any error to { error, code, fieldErrors? }.
  * The full endpoint list with access rules is in API.md.
  */
-import { DomainError } from "@/lib/errors"
+import { MAX_SUBMISSION_BYTES } from "@/lib/domain/submissions"
+import { DomainError, fieldError } from "@/lib/errors"
 
 import { authorize, MisconfiguredError, verifyRequest } from "./auth"
 import { createDb } from "./db"
@@ -13,6 +14,7 @@ import { Router } from "./router"
 import * as assessments from "./routes/assessments"
 import * as auth from "./routes/auth"
 import * as catalogue from "./routes/catalogue"
+import * as files from "./routes/files"
 import { health } from "./routes/health"
 import * as me from "./routes/me"
 import * as students from "./routes/students"
@@ -48,6 +50,16 @@ export const router = new Router()
   .patch("/v1/assessments/:id", "staff", assessments.update)
   .post("/v1/assessments/:id/results/publish", "staff", assessments.publishResults)
 
+  // Submission files (API.md, "Files"): signed URLs, then the browser talks to these two directly
+  .post("/v1/assessments/:id/submissions/upload-url", "student", files.requestUpload)
+  .put("/v1/uploads", "file-token", files.upload, {
+    maxBody: MAX_SUBMISSION_BYTES,
+    tooLarge: fieldError("file", "File must be smaller than 5 MB."),
+    cors: true,
+  })
+  .post("/v1/files/:submissionId/download-url", "user", files.requestDownload)
+  .get("/v1/files/download", "file-token", files.download)
+
   // The signed-in student's own data
   .get("/v1/me/overview", "student", me.overview)
   .get("/v1/me/fees", "student", me.fees)
@@ -71,9 +83,44 @@ async function readBody(request: Request, limit: number): Promise<Uint8Array | n
   return body.byteLength > limit ? null : body
 }
 
+/** The request's Origin when it is one of ALLOWED_ORIGINS, else null. */
+function allowedOrigin(request: Request, env: Env): string | null {
+  const origin = request.headers.get("Origin")
+  if (!origin) return null
+  const allowed = (env.ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean)
+  return allowed.includes(origin) ? origin : null
+}
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  return origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : { Vary: "Origin" }
+}
+
+function withHeaders(response: Response, headers: Record<string, string>): Response {
+  if (Object.keys(headers).length === 0) return response
+  const copy = new Response(response.body, response)
+  for (const [name, value] of Object.entries(headers)) copy.headers.set(name, value)
+  return copy
+}
+
 export async function handle(request: Request, env: Env): Promise<Response> {
   const now = new Date()
   const url = new URL(request.url)
+
+  // CORS preflight, only for the routes browsers call directly (file uploads).
+  if (request.method === "OPTIONS") {
+    const methods = router.corsMethods(url.pathname)
+    const origin = allowedOrigin(request, env)
+    if (methods.length === 0 || !origin) return json({ error: "Not allowed.", code: "FORBIDDEN" }, 403, { Vary: "Origin" })
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(origin),
+        "Access-Control-Allow-Methods": methods.join(", "),
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "600",
+      },
+    })
+  }
 
   const match = router.match(request.method, url.pathname)
   if (match.kind === "not-found") return json({ error: "Not found.", code: "NOT_FOUND" }, 404)
@@ -81,19 +128,20 @@ export async function handle(request: Request, env: Env): Promise<Response> {
     return json({ error: "Method not allowed.", code: "VALIDATION" }, 405, { Allow: match.allowed.join(", ") })
   }
   const { route, params } = match
+  const cors = route.options.cors ? corsHeaders(allowedOrigin(request, env)) : {}
 
   try {
-    const body = await readBody(request, MAX_JSON_BODY_BYTES)
-    if (!body) return payloadTooLarge()
+    const body = await readBody(request, route.options.maxBody ?? MAX_JSON_BODY_BYTES)
+    if (!body) return withHeaders(route.options.tooLarge ? errorResponse(route.options.tooLarge) : payloadTooLarge(), cors)
 
     const db = createDb(env)
     let session = null
-    if (route.access !== "public") {
+    if (route.access !== "public" && route.access !== "file-token") {
       const claims = await verifyRequest(request, url, body, env, now)
-      if (route.access !== "service") session = await authorize(db, claims, route.access)
+      if (route.access !== "service") session = await authorize(db, claims.sub, route.access)
     }
 
-    return await route.handler({
+    const response = await route.handler({
       request,
       env,
       url,
@@ -104,11 +152,12 @@ export async function handle(request: Request, env: Env): Promise<Response> {
       session,
       now,
     })
+    return withHeaders(response, cors)
   } catch (error) {
     if (error instanceof MisconfiguredError) {
       console.error(JSON.stringify({ event: "worker_misconfigured", message: error.message }))
-      return errorResponse(new DomainError("INTERNAL", "The service is not configured."))
+      return withHeaders(errorResponse(new DomainError("INTERNAL", "The service is not configured.")), cors)
     }
-    return errorResponse(error)
+    return withHeaders(errorResponse(error), cors)
   }
 }

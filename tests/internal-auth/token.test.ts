@@ -85,7 +85,7 @@ describe("API tokens (Next.js server → Worker)", () => {
 })
 
 describe("file tokens (Worker → browser)", () => {
-  const upload = { typ: "upload" as const, sub: USER, sid: "s1", aid: "a1" }
+  const upload = { typ: "upload" as const, sub: USER, sid: "s1", aid: "a1", name: "Essay.pdf", type: "application/pdf", size: 1024 }
 
   it("round-trips upload and download claims with their own lifetimes", async () => {
     const { token, expiresAt } = await signFileToken(SECRET, upload, NOW)

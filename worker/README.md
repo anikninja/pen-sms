@@ -1,22 +1,23 @@
 # PEN SMS API Worker
 
-The Cloudflare Worker that stands between the Next.js app and Cloudflare D1: Prisma 6.12 with `@prisma/adapter-d1`.
+The Cloudflare Worker that stands between the Next.js app and Cloudflare D1 (Prisma 6.12 with `@prisma/adapter-d1`) and the private R2 bucket of submission files.
 
 - **Endpoints, access rules and the authentication design:** [API.md](API.md).
 - **Schema, migrations and the D1 service layer it runs:** [../prisma/d1/README.md](../prisma/d1/README.md).
 
 ```
 worker/
-├── wrangler.jsonc        Worker config: D1 binding, migrations dir (../prisma/d1/migrations), vars. No secrets
+├── wrangler.jsonc        Worker config: D1 and R2 bindings, migrations dir (../prisma/d1/migrations), vars. No secrets
 ├── .dev.vars.example     Template for local secrets (copy to .dev.vars, which is git-ignored)
 ├── src/
 │   ├── index.ts          Entry point
 │   ├── app.ts            Route table and request pipeline (token → user → role → handler → errors)
 │   ├── auth.ts           Internal-token verification and role checks (the trust boundary)
 │   ├── db.ts             Per-request Prisma client over the D1 binding
+│   ├── storage.ts        R2 object store and signed upload/download URLs
 │   ├── http.ts, router.ts
 │   └── routes/           Thin handlers: validate input, call ../src/lib/services/d1/*, shape JSON
-├── scripts/seed-local.ts Seeds the local D1 through the adapter
+├── scripts/seed-local.ts Seeds the local D1 (through the adapter) and the local R2 bucket
 └── test/                 Integration tests against the real Worker (workerd + local D1)
 ```
 
@@ -33,12 +34,14 @@ npm ci --prefix worker                  # Worker: wrangler, @prisma/adapter-d1
 cp worker/.dev.vars.example worker/.dev.vars   # then set WORKER_INTERNAL_SECRET (≥ 32 random chars)
 
 npm --prefix worker run db:migrate:local       # applies prisma/d1/migrations to the local D1 (worker/.wrangler)
-npm --prefix worker run db:seed:local          # demo data, through @prisma/adapter-d1
+npm --prefix worker run db:seed:local          # demo data through @prisma/adapter-d1, plus the seed PDFs in local R2
 npm --prefix worker run dev                    # http://localhost:8787
 curl http://localhost:8787/health
 ```
 
-Every other endpoint needs a token signed with the same secret, which the Next.js app creates (Phase 6). **To reset the local database**, stop `wrangler dev`, delete `worker/.wrangler/state`, then migrate and seed again.
+Every other endpoint needs a token signed with the same secret, which the Next.js app creates. The local R2 bucket lives in `worker/.wrangler/state` as well.
+
+**To reset the local database and bucket**, stop `wrangler dev`, delete `worker/.wrangler/state`, then migrate and seed again.
 
 ## Checks
 

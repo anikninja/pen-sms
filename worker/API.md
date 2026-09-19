@@ -1,9 +1,11 @@
 # PEN SMS Worker API (v1)
 
-The Cloudflare Worker in this folder is the application's **database boundary**. The Next.js server (Vercel) calls it over HTTPS; the Worker runs the business rules against Cloudflare D1 through Prisma 6.12 and `@prisma/adapter-d1`. Browsers never call these endpoints, except the file-transfer URLs added in Phase 5.
+The Cloudflare Worker in this folder is the application's **database and file boundary**. The Next.js server (Vercel) calls it over HTTPS; the Worker runs the business rules against Cloudflare D1 through Prisma 6.12 and `@prisma/adapter-d1`, and keeps submission files in a private R2 bucket. Browsers never call these endpoints, except the two short-lived file-transfer URLs ([Files](#files)).
 
 ```
 Browser ──► Next.js (Vercel) ──HTTPS + signed token──► Worker ──Prisma + adapter-d1──► D1
+   │                                                    ▲  │
+   └──── signed upload/download URL (files only) ───────┘  └──► R2 (private)
 ```
 
 - **Coarse-grained.** Each page of the app needs one Worker request ([Views](#views)). Each form submission needs one ([Operations](#operations)). There are no generic "run this Prisma query" endpoints.
@@ -168,6 +170,62 @@ D1 has no interactive transactions, and Prisma's `$transaction` is not atomic on
 - **Bound parameters.** Prisma 6.12 on D1 fails a nested relation selection that has its own `where`, and a top-level `IN` list, once they need more than about 98 bound parameters ("too many SQL variables"; measured on local D1). The D1 services use flat queries with a constant number of parameters instead. Tests cover 136 students and 114 assessments.
 - **Stored formats.** DateTime values are stored as ISO text by the adapter. Money is stored as integer minor units (`BigInt`).
 
-## Not yet in this API
+## Files
 
-- Submission uploads and file downloads: Phase 5 (R2, Worker-signed URLs).
+Submission files (PDF/DOCX, up to 5 MB) live in the private R2 bucket `inxapp-sms-files` (binding `FILES`). They move between the browser and the Worker directly, **never through Vercel**, whose functions accept at most 4.5 MB per request.
+
+- **Why signed Worker URLs and not R2's S3 presigned URLs:** no R2 access keys to store, no bucket CORS, and the Worker can check type, size and ownership while receiving the file. Local development and tests also cover this path; Miniflare's R2 has no S3 endpoint.
+
+### Upload
+
+1. The browser asks the Next.js server, which calls `POST /v1/assessments/:id/submissions/upload-url` (student) with `{ fileName, fileType, fileSize }`.
+   - The Worker runs every submission rule first: own programme, open, enrolled, file type and size, and the replacement deadline. Failures use the same messages as the current app.
+   - It returns `{ upload: { url, method: "PUT", headers: { "Content-Type" }, expiresAt, maxBytes } }`.
+2. The browser sends `PUT <url>` with the raw file as the body and that `Content-Type`.
+   - The URL is `https://<worker>/v1/uploads?token=…`, valid for **5 minutes**.
+   - The token names the user, the student, the assessment and the declared file name, type and size.
+3. The Worker checks everything again when the file arrives:
+   - the token is valid and not expired;
+   - the user is still that student;
+   - the body is exactly the declared type and size (a larger body is refused before it is read);
+   - every submission rule.
+
+   It then stores the object and writes the row, and answers with the same `{ submission: { …, replaced } }` as `POST /api/assessments/:id/submissions` (201 for a first upload, 200 for a replacement). Lateness comes from the Worker's clock.
+
+### Download
+
+1. The Next.js route `/api/files/:submissionId` calls `POST /v1/files/:submissionId/download-url` (user).
+   - Staff may download any file; a student only their own. Anything else is `404 "File not found."`, so other students' submissions are not revealed.
+   - It returns `{ download: { url, expiresAt } }`, valid for **60 seconds**, for that submission and that exact version (object key).
+2. The browser follows the URL: `GET /v1/files/download?token=…`.
+   - The file is streamed from R2 as an attachment, with its stored name and type, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+   - If the submission was replaced after the URL was issued, or the object is missing: `404 "The file is no longer available."`.
+
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | `/v1/assessments/:id/submissions/upload-url` | student | Checks, then a 5-minute upload URL |
+| PUT | `/v1/uploads?token=…` | file token | CORS for `ALLOWED_ORIGINS` only. Body ≤ 5 MB |
+| POST | `/v1/files/:submissionId/download-url` | user | Ownership check, then a 60-second download URL |
+| GET | `/v1/files/download?token=…` | file token | Streams from R2 |
+
+### Storage rules
+
+- **Private bucket.** No public access, no `r2.dev` URL, no custom domain. There is no endpoint that lists objects or reads a key from the request; the only reads are through a download token that the Worker issued after checking ownership.
+- **Object keys** come from ids, never from the user's file name: `submissions/<submissionId>/<epochMs>-<random>.<pdf|docx>` (`src/lib/storage/object-store.ts`). The original name, type, size and time are in the `Submission` row.
+- **Consistency without transactions** (`src/lib/services/d1/submission-files.ts`):
+  1. the new version is stored under a new key before the row points at it;
+  2. the row is updated only if it still points at the version that was read (compare-and-swap);
+  3. the losing upload of a race deletes its own object and retries;
+  4. the previous version is deleted after the row moves.
+
+  Racing uploads leave exactly one row and one object; a test checks that the bucket then holds exactly the keys the database points at.
+- **File tokens** are signed with a key derived from `WORKER_INTERNAL_SECRET` for files only. An upload token is never accepted as a download token, nor either as an API token.
+- **CORS.** Only `PUT /v1/uploads` answers browser preflights, and only for the origins in `ALLOWED_ORIGINS` (`http://localhost:3000` locally; `https://sms.inxapp.net` in production). No bucket CORS is needed, because browsers never talk to R2.
+
+### Existing local files (`storage/uploads/`)
+
+These belong to the local PostgreSQL setup and are not deployed or migrated:
+- **Six seed fixtures** (`5e3d0a1c-…-020N-0.pdf`), which `prisma/seed.ts` regenerates.
+- **Five uploads from local testing on 17–18 Sep 2026.** The 12-byte `.pdf` and 7-byte `.docx` are exactly the fixtures of `scripts/e2e-api.mjs`.
+
+None is production data, since the app has never been deployed, so no migration script is needed. The files are left untouched. The D1 seed puts its own copies of the six fixtures into R2.

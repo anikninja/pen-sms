@@ -216,6 +216,10 @@ export type UploadTokenClaims = {
   sub: string
   sid: string
   aid: string
+  /** The file as declared when the URL was requested: the upload must match it. */
+  name: string
+  type: string
+  size: number
   iat: number
   exp: number
   jti: string
@@ -258,7 +262,8 @@ export async function verifyFileToken<T extends FileTokenClaims["typ"]>(
   const maxLifetime = typ === "upload" ? UPLOAD_TOKEN_TTL_SECONDS : DOWNLOAD_TOKEN_TTL_SECONDS
   const timeError = checkTimes(claims, now, maxLifetime)
   if (timeError) return { ok: false, reason: timeError }
-  const fields = typ === "upload" ? ["sub", "sid", "aid"] : ["sub", "fid", "key"]
+  const fields = typ === "upload" ? ["sub", "sid", "aid", "name", "type"] : ["sub", "fid", "key"]
   if (!fields.every((field) => typeof claims[field] === "string")) return { ok: false, reason: "MALFORMED" }
+  if (typ === "upload" && !Number.isSafeInteger(claims.size)) return { ok: false, reason: "MALFORMED" }
   return { ok: true, claims: claims as Extract<FileTokenClaims, { typ: T }> }
 }

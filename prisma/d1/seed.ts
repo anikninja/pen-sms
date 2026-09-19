@@ -9,8 +9,9 @@
  * (integer milliseconds vs ISO text). prisma/d1/seed-local.ts runs it against a throwaway local
  * SQLite file only.
  *
- * Submission files are not written here: storage moves to R2 in a later phase. `seedD1` returns the
- * PDF bytes for each submission key so that phase can upload them.
+ * Submission files are not written here: `seedD1` returns the PDF bytes for each object key, and the
+ * caller puts them into R2 (worker/scripts/seed-local.ts for the local bucket). The keys are fixed,
+ * so seeding again overwrites the same objects.
  *
  * Idempotent: every write is an upsert on a unique key (fixed ids for assessments and submissions).
  * No Prisma transactions are used (see src/lib/services/d1/client.ts).
@@ -21,6 +22,7 @@ import { isoDateToUtc, registryToday } from "../../src/lib/domain/dates"
 import { formatStudentId } from "../../src/lib/domain/student-id"
 import { isSubmissionLate } from "../../src/lib/domain/submissions"
 import { parseMoney } from "../../src/lib/money"
+import { submissionObjectKey } from "../../src/lib/storage/object-store"
 import type { D1Client } from "../../src/lib/services/d1/client"
 
 // Shared by every seeded account. Also shown on the login page when DEMO_MODE="true".
@@ -34,7 +36,7 @@ type EnrolmentStatus = "ENROLLED" | "DEFERRED" | "WITHDRAWN" | "COMPLETED"
 
 export type SeedResult = {
   counts: Record<"programmes" | "tariffs" | "students" | "fees" | "payments" | "users" | "assessments" | "submissions" | "results", number>
-  /** Submission files to upload to R2 later, by storage key. */
+  /** Submission files to put into R2, by object key. */
   files: { key: string; bytes: Uint8Array }[]
 }
 
@@ -188,13 +190,14 @@ export async function seedD1(db: D1Client, now = new Date()): Promise<SeedResult
     assessments.set(a.key, { id: a.id, deadline: a.deadline, title: a.title })
   }
 
-  // Submissions (rows only; the files are returned for the R2 phase)
+  // Submissions (rows only; the caller uploads the returned files to R2)
   const files: SeedResult["files"] = []
   for (const s of SUBMISSIONS) {
     const assessment = assessments.get(s.assessment)!
     const student = STUDENTS.find((candidate) => candidate.seq === s.seq)!
     const submittedAt = new Date(assessment.deadline.getTime() + s.offsetMs)
-    const key = `${s.id}-0.pdf`
+    // Fixed time and nonce: the same key on every run, so re-seeding does not leave old objects behind.
+    const key = submissionObjectKey(s.id, ".pdf", new Date(0), "seed")
     const bytes = minimalPdf(`${assessment.title} - ${student.fullName} (${studentIdFor(s.seq)})`)
     files.push({ key, bytes })
 

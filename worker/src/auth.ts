@@ -13,7 +13,6 @@ import { verifyApiToken, type ApiTokenClaims } from "@/lib/internal-auth/token"
 import type { D1Client } from "@/lib/services/d1/client"
 
 import type { Env } from "./env"
-import type { Access } from "./router"
 
 /** The configured secrets (current, then previous during a rotation); none if misconfigured. */
 export function internalSecrets(env: Env): string[] {
@@ -45,11 +44,11 @@ export async function verifyRequest(request: Request, url: URL, body: Uint8Array
   return result.claims
 }
 
-/** Loads the signed-in user from D1 and applies the route's role rule. */
-export async function authorize(db: D1Client, claims: ApiTokenClaims, access: Exclude<Access, "public" | "service">): Promise<Session> {
-  const user = claims.sub
+/** Loads the signed-in user (from a verified token) from D1 and applies the route's role rule. */
+export async function authorize(db: D1Client, userId: string | null, access: "user" | "staff" | "student"): Promise<Session> {
+  const user = userId
     ? await db.user.findUnique({
-        where: { id: claims.sub },
+        where: { id: userId },
         select: { id: true, name: true, email: true, role: true, studentId: true },
       })
     : null

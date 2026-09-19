@@ -2,14 +2,17 @@
  * A small path router: "/v1/students/:id" style patterns, exact segment matches, no wildcards.
  * Every route declares who may call it; see app.ts for how each access level is enforced.
  */
-import type { D1Client } from "@/lib/services/d1/client"
 import type { Session } from "@/lib/auth/session-types"
+import type { DomainError } from "@/lib/errors"
+import type { D1Client } from "@/lib/services/d1/client"
 
 import type { Env } from "./env"
 
 export type Access =
   /** Anyone; no token (health check only). */
   | "public"
+  /** No internal token: the handler verifies a signed file token from the URL (uploads, downloads). */
+  | "file-token"
   /** A valid internal token, with or without a user (the login lookup happens before sign-in). */
   | "service"
   /** A valid internal token for an existing user of any role. */
@@ -34,7 +37,16 @@ export type RouteContext = {
 
 export type Handler = (context: RouteContext) => Promise<Response>
 
-type Route = { method: string; segments: string[]; access: Access; handler: Handler }
+export type RouteOptions = {
+  /** Largest accepted body in bytes (default: MAX_JSON_BODY_BYTES). */
+  maxBody?: number
+  /** The error for a larger body (default: 413 "Request body is too large."). */
+  tooLarge?: DomainError
+  /** Called from browsers directly: answers CORS preflights and adds CORS headers for ALLOWED_ORIGINS. */
+  cors?: boolean
+}
+
+type Route = { method: string; segments: string[]; access: Access; handler: Handler; options: RouteOptions }
 
 export type Match =
   | { kind: "found"; route: Route; params: Record<string, string> }
@@ -44,22 +56,28 @@ export type Match =
 export class Router {
   private readonly routes: Route[] = []
 
-  add(method: string, pattern: string, access: Access, handler: Handler): this {
-    this.routes.push({ method, segments: pattern.split("/").filter(Boolean), access, handler })
+  add(method: string, pattern: string, access: Access, handler: Handler, options: RouteOptions = {}): this {
+    this.routes.push({ method, segments: pattern.split("/").filter(Boolean), access, handler, options })
     return this
   }
 
-  get(pattern: string, access: Access, handler: Handler) {
-    return this.add("GET", pattern, access, handler)
+  get(pattern: string, access: Access, handler: Handler, options?: RouteOptions) {
+    return this.add("GET", pattern, access, handler, options)
   }
-  post(pattern: string, access: Access, handler: Handler) {
-    return this.add("POST", pattern, access, handler)
+  post(pattern: string, access: Access, handler: Handler, options?: RouteOptions) {
+    return this.add("POST", pattern, access, handler, options)
   }
-  put(pattern: string, access: Access, handler: Handler) {
-    return this.add("PUT", pattern, access, handler)
+  put(pattern: string, access: Access, handler: Handler, options?: RouteOptions) {
+    return this.add("PUT", pattern, access, handler, options)
   }
-  patch(pattern: string, access: Access, handler: Handler) {
-    return this.add("PATCH", pattern, access, handler)
+  patch(pattern: string, access: Access, handler: Handler, options?: RouteOptions) {
+    return this.add("PATCH", pattern, access, handler, options)
+  }
+
+  /** Methods of the CORS-enabled routes at this path (for preflight requests). */
+  corsMethods(pathname: string): string[] {
+    const segments = pathname.split("/").filter(Boolean)
+    return this.routes.filter((route) => route.options.cors && matchSegments(route.segments, segments)).map((route) => route.method)
   }
 
   match(method: string, pathname: string): Match {
