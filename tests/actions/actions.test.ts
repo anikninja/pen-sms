@@ -2,24 +2,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { DomainError } from "@/lib/errors"
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
-vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }))
-vi.mock("@/lib/services/fees", () => ({ createPayment: vi.fn(), assignStudentFee: vi.fn() }))
-vi.mock("@/lib/services/submissions", () => ({ submitAssessment: vi.fn() }))
-vi.mock("@/lib/services/results", () => ({
+// The actions only talk to the data layer (src/lib/data), whichever backend is configured.
+const api = vi.hoisted(() => ({
+  createPayment: vi.fn(),
+  assignStudentFee: vi.fn(),
+  submitAssessment: vi.fn(),
+  requestSubmissionUpload: vi.fn(),
   upsertResult: vi.fn(),
   setResultPublished: vi.fn(),
   setStudentResultsPublished: vi.fn(),
   setAssessmentResultsPublished: vi.fn(),
 }))
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }))
+vi.mock("@/lib/data", () => ({ data: async () => api }))
+
 const { revalidatePath } = await import("next/cache")
 const { getSession } = await import("@/lib/auth/session")
-const fees = await import("@/lib/services/fees")
-const submissions = await import("@/lib/services/submissions")
-const results = await import("@/lib/services/results")
+const fees = api
+const submissions = api
+const results = api
 const { createPaymentAction } = await import("@/actions/payments")
-const { submitAssessmentAction } = await import("@/actions/submissions")
+const { requestUploadAction, submitAssessmentAction } = await import("@/actions/submissions")
 const { saveGradeAction } = await import("@/actions/results")
 
 const STUDENT_ID = "3f1c2a9e-8b7d-4c6e-9a1b-2c3d4e5f6a7b"
@@ -148,5 +153,29 @@ describe("saveGradeAction", () => {
     vi.mocked(results.upsertResult).mockResolvedValue({ grade: 70 } as never)
     expect(await saveGradeAction(STUDENT_ID, ASSESSMENT_ID, { grade: "70" })).toEqual({ ok: true, data: { grade: 70 } })
     expect(results.upsertResult).toHaveBeenCalledWith(STUDENT_ID, ASSESSMENT_ID, 70)
+  })
+})
+
+describe("requestUploadAction (direct uploads to the Worker)", () => {
+  const file = { name: "a.pdf", type: "application/pdf", size: 4 }
+
+  it("is for students only and validates the declared file", async () => {
+    vi.mocked(getSession).mockResolvedValue(staffSession as never)
+    expect(await requestUploadAction(ASSESSMENT_ID, file)).toMatchObject({ ok: false, code: "FORBIDDEN" })
+
+    vi.mocked(getSession).mockResolvedValue(studentSession as never)
+    expect(await requestUploadAction(ASSESSMENT_ID, { ...file, name: "" })).toMatchObject({ ok: false, code: "VALIDATION" })
+    expect(await requestUploadAction("not-an-id", file)).toMatchObject({ ok: false, code: "NOT_FOUND" })
+    expect(api.requestSubmissionUpload).not.toHaveBeenCalled()
+  })
+
+  it("returns the backend's upload grant, or null for server uploads", async () => {
+    vi.mocked(getSession).mockResolvedValue(studentSession as never)
+    const grant = { url: "https://sms-api.example/v1/uploads?token=t", method: "PUT", headers: { "Content-Type": "application/pdf" } }
+    api.requestSubmissionUpload.mockResolvedValueOnce(grant).mockResolvedValueOnce(null)
+
+    expect(await requestUploadAction(ASSESSMENT_ID, file)).toEqual({ ok: true, data: grant })
+    expect(api.requestSubmissionUpload).toHaveBeenCalledWith(ASSESSMENT_ID, file)
+    expect(await requestUploadAction(ASSESSMENT_ID, file)).toEqual({ ok: true, data: null })
   })
 })

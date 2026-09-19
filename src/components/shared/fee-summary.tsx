@@ -1,7 +1,7 @@
 import { EmptyState } from "@/components/shared/empty-state"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { FeeSummary, PaymentDto } from "@/lib/services/fees"
+import type { FeeSummary, PaymentDto } from "@/lib/services/shared/fees"
 import { formatCurrency, formatDate } from "@/lib/utils/format"
 
 /** Total fee / paid / outstanding / due date — shared by the staff student page and the student portal. */

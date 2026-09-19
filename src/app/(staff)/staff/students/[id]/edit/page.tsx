@@ -3,9 +3,8 @@ import type { Metadata } from "next"
 import { PageHeader } from "@/components/shared/page-header"
 import { StudentForm } from "@/components/staff/student-form"
 import { requireStaff } from "@/lib/auth/session"
+import { data } from "@/lib/data"
 import { idOr404, orNotFound } from "@/lib/pages"
-import { listProgrammes } from "@/lib/services/programmes"
-import { getStudent } from "@/lib/services/students"
 
 export const metadata: Metadata = { title: "Edit student · Registry" }
 
@@ -13,7 +12,7 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
   await requireStaff()
   const id = idOr404((await params).id)
 
-  const [student, allProgrammes] = await Promise.all([orNotFound(getStudent(id)), listProgrammes()])
+  const { student, programmes: allProgrammes } = await orNotFound((await data()).getStudentEditPage(id))
   // Active programmes, plus the student's current one even if it has since been deactivated.
   const programmes = allProgrammes.filter((programme) => programme.active || programme.id === student.programme.id)
 

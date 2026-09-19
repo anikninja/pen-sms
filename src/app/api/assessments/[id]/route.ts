@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 
 import { apiRoute, readJson } from "@/lib/api/response"
 import { authorizeStaff } from "@/lib/auth/guards"
+import { data } from "@/lib/data"
 import { parseInput } from "@/lib/errors"
-import { updateAssessment } from "@/lib/services/assessments"
 import { assessmentUpdateSchema } from "@/lib/validations/assessments"
 import { parseId } from "@/lib/validations/ids"
 
@@ -14,5 +14,5 @@ export const PATCH = apiRoute(async (request, { params }: Context) => {
   await authorizeStaff()
   const id = parseId((await params).id, "Assessment")
   const input = parseInput(assessmentUpdateSchema, await readJson(request))
-  return NextResponse.json({ assessment: await updateAssessment(id, input) })
+  return NextResponse.json({ assessment: await (await data()).updateAssessment(id, input) })
 })

@@ -12,8 +12,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
-import { listProgrammes } from "@/lib/services/programmes"
-import { listStudents } from "@/lib/services/students"
+import { data } from "@/lib/data"
 import { studentSearchSchema } from "@/lib/validations/students"
 
 export const metadata: Metadata = { title: "Students · Registry" }
@@ -31,7 +30,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
   // Search and filters run in the database query, driven by the URL (architecture.md §20).
   const parsed = studentSearchSchema.safeParse(await searchParams)
   const search = parsed.success ? parsed.data : {}
-  const [students, programmes] = await Promise.all([listStudents(search), listProgrammes()])
+  const { students, programmes } = await (await data()).getStudentsPage(search)
   const filtered = Boolean(search.q || search.programme || search.status)
 
   return (

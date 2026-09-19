@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs"
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 
-import { prisma } from "@/lib/prisma"
+import { data } from "@/lib/data"
 import { loginSchema } from "@/lib/validations/auth"
 
 // Compared against when the email is unknown, so a missing account takes as long as a wrong password.
@@ -22,7 +22,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
-        const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+        // The account comes from PostgreSQL or the Worker (DATA_BACKEND); bcrypt always runs here.
+        const user = await (await data()).findLoginAccount(parsed.data.email)
         const passwordOk = await bcrypt.compare(
           parsed.data.password,
           user?.passwordHash ?? DUMMY_PASSWORD_HASH

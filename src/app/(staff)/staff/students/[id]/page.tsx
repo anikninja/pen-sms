@@ -20,12 +20,9 @@ import { UrlTabs } from "@/components/staff/url-tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
+import { data } from "@/lib/data"
 import { registryToday } from "@/lib/domain/dates"
 import { idOr404, orNotFound } from "@/lib/pages"
-import { getStudentFees } from "@/lib/services/fees"
-import { getStudentResults } from "@/lib/services/results"
-import { getStudent } from "@/lib/services/students"
-import { getStudentAssessments } from "@/lib/services/submissions"
 import { formatBytes, formatDate, formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Student · Registry" }
@@ -34,12 +31,13 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   await requireStaff()
   const id = idOr404((await params).id)
 
-  const student = await orNotFound(getStudent(id))
-  const [{ summary, payments, tariff }, assessments, results] = await Promise.all([
-    getStudentFees(id),
-    getStudentAssessments(id),
-    getStudentResults(id),
-  ])
+  // One request: details, fees, the programme's assessments with this student's work, and results.
+  const {
+    student,
+    fees: { summary, payments, tariff },
+    assessments,
+    results,
+  } = await orNotFound((await data()).getStudentPage(id))
 
   const overdue: OverdueInfo = summary.isOverdue
     ? { outstanding: summary.outstanding, currency: summary.currency, daysOverdue: summary.daysOverdue }

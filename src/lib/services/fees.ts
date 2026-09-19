@@ -139,7 +139,10 @@ export async function listFeeOverview(filter: { status?: FeeOverviewRow["status"
 }
 
 /** Records a payment. The outstanding balance is recomputed inside the locked transaction (§7). */
-export async function createPayment(studentId: string, input: PaymentCreateInput): Promise<PaymentDto> {
+export async function createPayment(
+  studentId: string,
+  input: PaymentCreateInput
+): Promise<PaymentDto & { studentId: string; updatedAt: Date }> {
   try {
     const row = await prisma.$transaction(async (tx) => {
       await lockStudent(tx, studentId)

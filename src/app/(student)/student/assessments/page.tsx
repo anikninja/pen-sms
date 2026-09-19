@@ -7,7 +7,7 @@ import { OpenBadge, SubmissionStatusBadge } from "@/components/shared/status-bad
 import { SubmissionUpload } from "@/components/student/submission-upload"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireStudent } from "@/lib/auth/session"
-import { getStudentAssessments } from "@/lib/services/submissions"
+import { data } from "@/lib/data"
 import { formatBytes, formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Assessments · Student Portal" }
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Assessments · Student Portal" }
 export default async function StudentAssessmentsPage() {
   // Assessments of the signed-in student's own programme only (architecture.md §24).
   const session = await requireStudent()
-  const assessments = await getStudentAssessments(session.studentId)
+  const assessments = await (await data()).getMyAssessments(session.studentId)
 
   return (
     <>

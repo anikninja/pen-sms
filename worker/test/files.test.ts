@@ -62,7 +62,7 @@ async function put(url: string, body: Uint8Array, type: string, origin?: string)
   const response = await w.fetch(local(url), {
     method: "PUT",
     headers: { "Content-Type": type, ...(origin ? { Origin: origin } : {}) },
-    body,
+    body: body as BodyInit,
   })
   return { status: response.status, data: (await response.json()) as UploadResponse, headers: response.headers }
 }

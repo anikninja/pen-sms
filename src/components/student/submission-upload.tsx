@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import { UploadIcon } from "lucide-react"
 
-import { submitAssessmentAction } from "@/actions/submissions"
+import { requestUploadAction, submitAssessmentAction, uploadCompletedAction } from "@/actions/submissions"
 import { useServerAction } from "@/components/shared/use-server-action"
 import {
   AlertDialog,
@@ -16,8 +16,43 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { ACCEPTED_FILE_TYPES, checkSubmissionFile } from "@/lib/domain/submissions"
+import type { ActionResult, ErrorCode, FieldErrors } from "@/lib/errors"
+import type { SubmissionDto } from "@/lib/services/shared/submissions"
 
 const ACCEPT = [...Object.keys(ACCEPTED_FILE_TYPES), ...Object.values(ACCEPTED_FILE_TYPES)].join(",")
+
+type Submitted = Pick<SubmissionDto, "fileName" | "isLate"> & { replaced: boolean }
+
+/**
+ * Uploads a submission. With the Cloudflare backend the server first checks everything and hands
+ * out a short-lived URL, and the browser sends the file straight to the Worker (R2), so the file
+ * never passes through Vercel. With the PostgreSQL backend the file goes through the Server Action.
+ */
+async function uploadSubmission(assessmentId: string, file: File): Promise<ActionResult<Submitted>> {
+  const grant = await requestUploadAction(assessmentId, { name: file.name, type: file.type, size: file.size })
+  if (!grant.ok) return grant
+  if (grant.data === null) {
+    const formData = new FormData()
+    formData.append("assessmentId", assessmentId)
+    formData.append("file", file)
+    return submitAssessmentAction(formData)
+  }
+
+  const response = await fetch(grant.data.url, { method: grant.data.method, headers: grant.data.headers, body: file })
+  const body = (await response.json().catch(() => null)) as
+    | { submission?: Submitted; error?: string; code?: ErrorCode; fieldErrors?: FieldErrors }
+    | null
+  if (!response.ok || !body?.submission) {
+    return {
+      ok: false,
+      error: body?.error ?? "The upload could not be completed. Please try again.",
+      code: body?.code ?? "INTERNAL",
+      ...(body?.fieldErrors ? { fieldErrors: body.fieldErrors } : {}),
+    }
+  }
+  await uploadCompletedAction() // refreshes the pages that show the submission
+  return { ok: true, data: body.submission }
+}
 
 /**
  * Upload or replace a submission (architecture.md §9, §10, §24). The file is checked in the browser
@@ -42,10 +77,7 @@ export function SubmissionUpload({
   const error = localError ?? fieldErrors.file?.[0] ?? null
 
   function upload(file: File) {
-    const formData = new FormData()
-    formData.append("assessmentId", assessmentId)
-    formData.append("file", file)
-    run(() => submitAssessmentAction(formData), {
+    run(() => uploadSubmission(assessmentId, file), {
       success: (submission) =>
         `${submission.replaced ? "Submission replaced" : "Submitted"}: ${submission.fileName}${submission.isLate ? " (marked late)" : ""}.`,
       onSuccess: () => {

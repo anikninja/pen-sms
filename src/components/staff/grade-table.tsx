@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { calculateClassification } from "@/lib/domain/results"
-import type { AssessmentSubmissionRow } from "@/lib/services/assessments"
+import type { AssessmentSubmissionRow } from "@/lib/services/shared/assessments"
 import { formatDateTime } from "@/lib/utils/format"
 
 export type GradeRow = AssessmentSubmissionRow & { overdue: OverdueInfo }

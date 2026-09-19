@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStudent } from "@/lib/auth/session"
 import type { Classification } from "@/lib/domain/results"
-import { getStudentPublishedResults } from "@/lib/services/results"
+import { data } from "@/lib/data"
 
 export const metadata: Metadata = { title: "Marksheet · Student Portal" }
 
@@ -21,7 +21,7 @@ export default async function MarksheetPage() {
   const session = await requireStudent()
   // Published results only. The filter is in the database query, so withheld results are never
   // loaded, rendered or sent to the browser — not even as a count (architecture.md §13, §24).
-  const results = await getStudentPublishedResults(session.studentId)
+  const results = await (await data()).getMyMarksheet(session.studentId)
 
   return (
     <>

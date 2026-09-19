@@ -8,9 +8,7 @@ import { AssessmentPicker } from "@/components/staff/assessment-picker"
 import { GradeTable } from "@/components/staff/grade-table"
 import { AssessmentPublishButtons } from "@/components/staff/result-actions"
 import { requireStaff } from "@/lib/auth/session"
-import { prisma } from "@/lib/prisma"
-import { listAssessments } from "@/lib/services/assessments"
-import { getGradingRows } from "@/lib/services/grading"
+import { data } from "@/lib/data"
 import { formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Results · Registry" }
@@ -19,18 +17,10 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
   await requireStaff()
   const requested = (await searchParams).assessment
 
-  const [assessments, withheld] = await Promise.all([
-    listAssessments(),
-    prisma.result.groupBy({ by: ["assessmentId"], where: { published: false }, _count: { _all: true } }),
-  ])
-  const withheldByAssessment = new Map(withheld.map((row) => [row.assessmentId, row._count._all]))
-
-  // Default to the first assessment that still has withheld results, so outstanding work is shown first.
-  const selected =
-    assessments.find((assessment) => assessment.id === requested) ??
-    (requested ? null : (assessments.find((assessment) => withheldByAssessment.has(assessment.id)) ?? assessments[0] ?? null))
-
-  const grading = selected ? await getGradingRows(selected.id) : null
+  // The data layer picks the assessment: the requested one, else the first that still has withheld
+  // results (so outstanding work is shown first), else the first.
+  const { assessments, withheld, selectedId, grading } = await (await data()).getResultsPage(requested)
+  const selected = assessments.find((assessment) => assessment.id === selectedId) ?? null
 
   return (
     <>
@@ -55,7 +45,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
               title: assessment.title,
               module: assessment.module,
               programmeCode: assessment.programme.code,
-              unpublished: withheldByAssessment.get(assessment.id) ?? 0,
+              unpublished: withheld[assessment.id] ?? 0,
             }))}
           />
 

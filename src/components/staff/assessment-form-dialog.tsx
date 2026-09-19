@@ -20,8 +20,8 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { AssessmentDto } from "@/lib/services/assessments"
-import type { ProgrammeDto } from "@/lib/services/programmes"
+import type { AssessmentDto } from "@/lib/services/shared/assessments"
+import type { ProgrammeDto } from "@/lib/services/shared/programmes"
 import { registryDateTimeLocalToIso, toRegistryDateTimeLocal } from "@/lib/utils/datetime"
 
 export function AssessmentFormDialog({

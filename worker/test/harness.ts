@@ -49,6 +49,8 @@ export type CallOptions = {
 
 export type TestWorker = {
   dir: string
+  /** The Worker's real local HTTP address, for clients that use fetch (e.g. the Next.js data layer). */
+  url: URL
   users: Map<string, SeededUser>
   // Response bodies are asserted field by field in the tests; typing every endpoint here adds nothing.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -154,6 +156,8 @@ export async function startTestWorker(
     return { status: response.status, data, headers: response.headers }
   }
 
+  const url = await worker.url
+
   let stopped = false
   const stop = async () => {
     if (stopped) return
@@ -163,6 +167,7 @@ export async function startTestWorker(
 
   return {
     dir,
+    url,
     users,
     call,
     fetch: fetchWorker,

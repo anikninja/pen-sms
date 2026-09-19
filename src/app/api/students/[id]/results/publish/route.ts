@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 
 import { apiRoute, readJson } from "@/lib/api/response"
 import { authorizeStaff } from "@/lib/auth/guards"
+import { data } from "@/lib/data"
 import { parseInput } from "@/lib/errors"
-import { setStudentResultsPublished } from "@/lib/services/results"
 import { parseId } from "@/lib/validations/ids"
 import { publishSchema } from "@/lib/validations/results"
 
@@ -14,5 +14,5 @@ export const POST = apiRoute(async (request, { params }: Context) => {
   await authorizeStaff()
   const id = parseId((await params).id, "Student")
   const { published } = parseInput(publishSchema, await readJson(request))
-  return NextResponse.json(await setStudentResultsPublished(id, published))
+  return NextResponse.json(await (await data()).setStudentResultsPublished(id, published))
 })

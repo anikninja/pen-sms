@@ -4,35 +4,24 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { ROLE_HOME } from "@/lib/auth/roles"
 import type { Session, StaffSession, StudentSession } from "@/lib/auth/session-types"
-import { prisma } from "@/lib/prisma"
+import { data } from "@/lib/data"
 
 export type { Session, StaffSession, StudentSession } from "@/lib/auth/session-types"
 
 /**
  * The single source of "who is making this request" for pages, actions and API routes.
  *
- * The JWT only proves identity. Role and student link are re-read from the database on
- * every request, so a deleted account or a changed role takes effect immediately instead of
- * when the cookie expires. Replace this function to swap the auth provider; callers don't change.
+ * The JWT only proves identity. Role and student link are re-read from the database (PostgreSQL,
+ * or D1 through the Worker) on every request, so a deleted account or a changed role takes effect
+ * immediately instead of when the cookie expires. Replace this function to swap the auth provider;
+ * callers don't change.
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   const authSession = await auth()
   const userId = authSession?.user?.id
   if (!userId) return null
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, studentId: true },
-  })
-  if (!user) return null
-
-  return {
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    studentId: user.studentId,
-  }
+  return (await data()).loadSession(userId)
 })
 
 /** For pages and layouts: sends signed-out users to /login and other roles to their own home. */

@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { ProgrammeDto } from "@/lib/services/programmes"
-import type { StudentDto } from "@/lib/services/students"
+import type { ProgrammeDto } from "@/lib/services/shared/programmes"
+import type { StudentDto } from "@/lib/services/shared/students"
 
 const STATUSES = [
   { value: "ENROLLED", label: "Enrolled" },

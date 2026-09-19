@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/shared/page-header"
 import { EnrolmentStatusBadge, FeeStatusBadge, SubmissionStatusBadge } from "@/components/shared/status-badges"
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireStudent } from "@/lib/auth/session"
+import { data } from "@/lib/data"
 import { orNotFound } from "@/lib/pages"
-import { getStudentOverview } from "@/lib/services/student-portal"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Dashboard · Student Portal" }
@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Dashboard · Student Portal" }
 export default async function StudentDashboardPage() {
   // The student is always taken from the session, never from the URL (architecture.md §24).
   const session = await requireStudent()
-  const { student, fee, nextDeadline, counts } = await orNotFound(getStudentOverview(session.studentId))
+  const { student, fee, nextDeadline, counts } = await orNotFound((await data()).getMyOverview(session.studentId))
 
   const details = [
     { label: "Student ID", value: <span className="font-mono">{student.studentId}</span> },

@@ -3,8 +3,8 @@ import { NextResponse } from "next/server"
 import { apiRoute } from "@/lib/api/response"
 import { authorizeStudent } from "@/lib/auth/guards"
 import { MAX_SUBMISSION_BYTES } from "@/lib/domain/submissions"
+import { data } from "@/lib/data"
 import { DomainError, fieldError } from "@/lib/errors"
-import { submitAssessment } from "@/lib/services/submissions"
 import { parseId } from "@/lib/validations/ids"
 
 type Context = { params: Promise<{ id: string }> }
@@ -12,7 +12,8 @@ type Context = { params: Promise<{ id: string }> }
 // Room for multipart boundaries and headers on top of the 5 MB file limit.
 const MAX_BODY_BYTES = MAX_SUBMISSION_BYTES + 64 * 1024
 
-// POST /api/assessments/[id]/submissions — multipart/form-data with a "file" field
+// POST /api/assessments/[id]/submissions — multipart/form-data with a "file" field.
+// On Vercel, request bodies are limited to 4.5 MB; larger files go through …/submissions/upload-url.
 export const POST = apiRoute(async (request, { params }: Context) => {
   const session = await authorizeStudent()
   const assessmentId = parseId((await params).id, "Assessment")
@@ -31,6 +32,6 @@ export const POST = apiRoute(async (request, { params }: Context) => {
   const file = formData.get("file")
   if (!(file instanceof File)) throw fieldError("file", "Choose a PDF or DOCX file to upload.")
 
-  const submission = await submitAssessment({ studentId: session.studentId, assessmentId, file })
+  const submission = await (await data()).submitAssessment({ studentId: session.studentId, assessmentId, file })
   return NextResponse.json({ submission }, { status: submission.replaced ? 200 : 201 })
 })

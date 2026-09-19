@@ -8,7 +8,8 @@ import { EnrolmentStatusBadge, FeeStatusBadge } from "@/components/shared/status
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
 import type { FeeStatus } from "@/lib/domain/fees"
-import { listFeeOverview, totalOutstandingByCurrency } from "@/lib/services/fees"
+import { data } from "@/lib/data"
+import { totalOutstandingByCurrency } from "@/lib/services/shared/fees"
 import { formatCurrency, formatDate } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Fees · Registry" }
@@ -26,7 +27,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
   const requested = (await searchParams).status
   const status = FILTERS.find((filter) => filter.value === requested)?.value ?? null
 
-  const all = await listFeeOverview()
+  const all = await (await data()).listFeeOverview()
   const rows = status ? all.filter((row) => row.status === status) : all
   const countFor = (value: FeeStatus | null) => (value ? all.filter((row) => row.status === value).length : all.length)
   const totals = totalOutstandingByCurrency(rows)

@@ -10,10 +10,8 @@ import { AssessmentPublishButtons } from "@/components/staff/result-actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireStaff } from "@/lib/auth/session"
+import { data } from "@/lib/data"
 import { idOr404, orNotFound } from "@/lib/pages"
-import { getAssessment } from "@/lib/services/assessments"
-import { getGradingRows } from "@/lib/services/grading"
-import { listProgrammes } from "@/lib/services/programmes"
 import { formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Assessment · Registry" }
@@ -22,8 +20,11 @@ export default async function AssessmentDetailPage({ params }: { params: Promise
   await requireStaff()
   const id = idOr404((await params).id)
 
-  const assessment = await orNotFound(getAssessment(id))
-  const [{ rows, counts }, programmes] = await Promise.all([getGradingRows(id), listProgrammes()])
+  const {
+    assessment,
+    grading: { rows, counts },
+    programmes,
+  } = await orNotFound((await data()).getAssessmentPage(id))
   const editablePrograms = programmes.filter((programme) => programme.active || programme.id === assessment.programme.id)
 
   return (

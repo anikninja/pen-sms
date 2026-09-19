@@ -7,7 +7,7 @@ import { EnrolmentStatusBadge } from "@/components/shared/status-badges"
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
-import { getStaffDashboard } from "@/lib/services/dashboard"
+import { data } from "@/lib/data"
 import { formatCurrency, formatDate } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Dashboard · Registry" }
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Dashboard · Registry" }
 export default async function StaffDashboardPage() {
   // Layouts and pages render in parallel, so each page checks the role itself.
   const session = await requireStaff()
-  const dashboard = await getStaffDashboard()
+  const dashboard = await (await data()).getStaffDashboard()
 
   const outstanding =
     dashboard.totalOutstanding.length === 0

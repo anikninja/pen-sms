@@ -19,7 +19,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { FeeSummary, TariffDto } from "@/lib/services/fees"
+import type { FeeSummary, TariffDto } from "@/lib/services/shared/fees"
 import { formatCurrency, formatDate, toIsoDate } from "@/lib/utils/format"
 
 // Each dialog's form is its own component: it mounts when the dialog opens (so it starts from the

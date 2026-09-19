@@ -3,14 +3,14 @@ import type { Metadata } from "next"
 import { PageHeader } from "@/components/shared/page-header"
 import { StudentForm } from "@/components/staff/student-form"
 import { requireStaff } from "@/lib/auth/session"
-import { listProgrammes } from "@/lib/services/programmes"
+import { data } from "@/lib/data"
 
 export const metadata: Metadata = { title: "New student · Registry" }
 
 export default async function NewStudentPage() {
   await requireStaff()
   // Inactive programmes are not offered for new students (§20).
-  const programmes = await listProgrammes({ activeOnly: true })
+  const programmes = await (await data()).listProgrammes({ activeOnly: true })
 
   return (
     <>

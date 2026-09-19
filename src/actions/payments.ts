@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 
 import { authorizeStaff } from "@/lib/auth/guards"
+import { data } from "@/lib/data"
 import { parseInput, runAction } from "@/lib/errors"
-import { assignStudentFee, createPayment } from "@/lib/services/fees"
 import { feeAssignSchema, paymentCreateSchema } from "@/lib/validations/fees"
 import { parseId } from "@/lib/validations/ids"
 
@@ -16,7 +16,7 @@ function revalidateFees() {
 export async function createPaymentAction(studentId: unknown, input: unknown) {
   return runAction(async () => {
     await authorizeStaff()
-    const payment = await createPayment(parseId(studentId, "Student"), parseInput(paymentCreateSchema, input))
+    const payment = await (await data()).createPayment(parseId(studentId, "Student"), parseInput(paymentCreateSchema, input))
     revalidateFees()
     return payment
   })
@@ -25,7 +25,7 @@ export async function createPaymentAction(studentId: unknown, input: unknown) {
 export async function assignStudentFeeAction(studentId: unknown, input: unknown) {
   return runAction(async () => {
     await authorizeStaff()
-    const summary = await assignStudentFee(parseId(studentId, "Student"), parseInput(feeAssignSchema, input))
+    const summary = await (await data()).assignStudentFee(parseId(studentId, "Student"), parseInput(feeAssignSchema, input))
     revalidateFees()
     return summary
   })

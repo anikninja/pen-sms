@@ -10,8 +10,7 @@ import { AssessmentFormDialog } from "@/components/staff/assessment-form-dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { requireStaff } from "@/lib/auth/session"
-import { listAssessments } from "@/lib/services/assessments"
-import { listProgrammes } from "@/lib/services/programmes"
+import { data } from "@/lib/data"
 import { formatDateTime } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Assessments · Registry" }
@@ -20,9 +19,8 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
   await requireStaff()
   const programmeCode = (await searchParams).programme
 
-  const programmes = await listProgrammes()
+  const { programmes, assessments } = await (await data()).getAssessmentsPage(programmeCode)
   const programme = programmes.find((candidate) => candidate.code === programmeCode)
-  const assessments = await listAssessments({ programmeId: programme?.id })
   const activeProgrammes = programmes.filter((candidate) => candidate.active)
 
   return (

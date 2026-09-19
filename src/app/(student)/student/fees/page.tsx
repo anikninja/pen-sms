@@ -5,7 +5,7 @@ import { FeeSummaryCards, PaymentHistoryTable } from "@/components/shared/fee-su
 import { PageHeader } from "@/components/shared/page-header"
 import { FeeStatusBadge } from "@/components/shared/status-badges"
 import { requireStudent } from "@/lib/auth/session"
-import { getStudentFeeSummary, listPayments } from "@/lib/services/fees"
+import { data } from "@/lib/data"
 import { formatCurrency, formatDate } from "@/lib/utils/format"
 
 export const metadata: Metadata = { title: "Fees · Student Portal" }
@@ -13,10 +13,7 @@ export const metadata: Metadata = { title: "Fees · Student Portal" }
 export default async function StudentFeesPage() {
   // Own fees only: the student id comes from the session (architecture.md §24).
   const session = await requireStudent()
-  const [summary, payments] = await Promise.all([
-    getStudentFeeSummary(session.studentId),
-    listPayments(session.studentId),
-  ])
+  const { summary, payments } = await (await data()).getMyFees(session.studentId)
 
   return (
     <>

@@ -3,13 +3,8 @@
 import { revalidatePath } from "next/cache"
 
 import { authorizeStaff } from "@/lib/auth/guards"
+import { data } from "@/lib/data"
 import { parseInput, runAction } from "@/lib/errors"
-import {
-  setAssessmentResultsPublished,
-  setResultPublished,
-  setStudentResultsPublished,
-  upsertResult,
-} from "@/lib/services/results"
 import { parseId } from "@/lib/validations/ids"
 import { publishSchema, resultUpsertSchema } from "@/lib/validations/results"
 
@@ -22,7 +17,7 @@ export async function saveGradeAction(studentId: unknown, assessmentId: unknown,
   return runAction(async () => {
     await authorizeStaff()
     const { grade } = parseInput(resultUpsertSchema, input)
-    const result = await upsertResult(parseId(studentId, "Student"), parseId(assessmentId, "Assessment"), grade)
+    const result = await (await data()).upsertResult(parseId(studentId, "Student"), parseId(assessmentId, "Assessment"), grade)
     revalidateResults()
     return result
   })
@@ -32,7 +27,7 @@ export async function setResultPublishedAction(studentId: unknown, assessmentId:
   return runAction(async () => {
     await authorizeStaff()
     const { published } = parseInput(publishSchema, input)
-    const result = await setResultPublished(
+    const result = await (await data()).setResultPublished(
       parseId(studentId, "Student"),
       parseId(assessmentId, "Assessment"),
       published
@@ -46,7 +41,7 @@ export async function setStudentResultsPublishedAction(studentId: unknown, input
   return runAction(async () => {
     await authorizeStaff()
     const { published } = parseInput(publishSchema, input)
-    const result = await setStudentResultsPublished(parseId(studentId, "Student"), published)
+    const result = await (await data()).setStudentResultsPublished(parseId(studentId, "Student"), published)
     revalidateResults()
     return result
   })
@@ -56,7 +51,7 @@ export async function setAssessmentResultsPublishedAction(assessmentId: unknown,
   return runAction(async () => {
     await authorizeStaff()
     const { published } = parseInput(publishSchema, input)
-    const result = await setAssessmentResultsPublished(parseId(assessmentId, "Assessment"), published)
+    const result = await (await data()).setAssessmentResultsPublished(parseId(assessmentId, "Assessment"), published)
     revalidateResults()
     return result
   })

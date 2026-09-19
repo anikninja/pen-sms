@@ -9,6 +9,7 @@
  */
 import type { Session } from "@/lib/auth/session-types"
 import { DomainError } from "@/lib/errors"
+import { UNSIGNED_REQUEST } from "@/lib/internal-auth/messages"
 import { verifyApiToken, type ApiTokenClaims } from "@/lib/internal-auth/token"
 import type { D1Client } from "@/lib/services/d1/client"
 
@@ -39,7 +40,7 @@ export async function verifyRequest(request: Request, url: URL, body: Uint8Array
   if (!result.ok) {
     // The reason is logged for operators; the caller only learns that the request was not accepted.
     console.warn(JSON.stringify({ event: "internal_token_rejected", reason: result.reason, method: request.method, path: url.pathname }))
-    throw new DomainError("UNAUTHORIZED", "The request is not signed by the application.")
+    throw new DomainError("UNAUTHORIZED", UNSIGNED_REQUEST)
   }
   return result.claims
 }
