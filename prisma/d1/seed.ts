@@ -26,6 +26,7 @@ import { submissionObjectKey } from "../../src/lib/storage/object-store"
 import type { D1Client } from "../../src/lib/services/d1/client"
 
 // Shared by every seeded account. Also shown on the login page when DEMO_MODE="true".
+// A public deployment passes its own password instead (worker/scripts/prepare-remote-seed.ts).
 const DEMO_PASSWORD = "Password123!"
 
 const DAY = 24 * 60 * 60 * 1000
@@ -40,7 +41,7 @@ export type SeedResult = {
   files: { key: string; bytes: Uint8Array }[]
 }
 
-export async function seedD1(db: D1Client, now = new Date()): Promise<SeedResult> {
+export async function seedD1(db: D1Client, now = new Date(), options: { password?: string } = {}): Promise<SeedResult> {
   const YEAR = now.getFullYear()
   const daysFromNow = (days: number) => new Date(now.getTime() + days * DAY)
   /** A calendar date N days ago (negative = ahead) in the Registry time zone, stored as UTC midnight. */
@@ -112,7 +113,7 @@ export async function seedD1(db: D1Client, now = new Date()): Promise<SeedResult
     { seq: 6, assessment: "ACC", grade: 65, published: true },
   ]
 
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10)
+  const passwordHash = await bcrypt.hash(options.password ?? DEMO_PASSWORD, 10)
 
   // Programmes and tariffs
   const programmes = new Map<ProgrammeCode, { id: string; tariffId: string; amount: bigint; dueDate: Date }>()

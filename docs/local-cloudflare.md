@@ -60,7 +60,8 @@ npm --prefix worker run dev                # http://127.0.0.1:8787
 curl http://127.0.0.1:8787/health          # {"status":"ok","d1":"ok","schema":{"ok":true,…}}
 ```
 
-Every other Worker endpoint needs a request signed by the Next.js server; see [worker/API.md](../worker/API.md).
+- **Signed requests:** every other Worker endpoint needs a request signed by the Next.js server; see [worker/API.md](../worker/API.md).
+- **Local hosts only over HTTP:** use `127.0.0.1` or `localhost`. The Worker refuses plain HTTP to any other hostname (403 "HTTPS is required."), e.g. a LAN address.
 
 ## 6. Start Next.js
 

@@ -32,6 +32,29 @@ describe("GET /health", () => {
   })
 })
 
+describe("HTTPS only", () => {
+  it("refuses plain HTTP to a public hostname, before any other check", async () => {
+    const token = await signApiToken(TEST_SECRET, {
+      userId: staffId,
+      request: { method: "GET", pathAndQuery: "/v1/students", body: null },
+    })
+    const signed = await w.fetch("http://sms-api.test/v1/students", { headers: { Authorization: `Bearer ${token}` } })
+    expect(signed.status).toBe(403)
+    expect(await signed.json()).toEqual({ error: "HTTPS is required.", code: "FORBIDDEN" })
+    expect(signed.headers.get("cache-control")).toBe("no-store")
+
+    for (const [path, method] of [["/health", "GET"], ["/v1/uploads", "OPTIONS"], ["/v1/files/download", "GET"]] as const) {
+      expect((await w.fetch(`http://sms-api.test${path}`, { method })).status).toBe(403)
+    }
+  })
+
+  it("allows plain HTTP on localhost for local development", async () => {
+    for (const origin of ["http://127.0.0.1:8787", "http://localhost:8787", "http://[::1]:8787"]) {
+      expect((await w.fetch(`${origin}/health`)).status).toBe(200)
+    }
+  })
+})
+
 describe("internal token (trust boundary)", () => {
   it("rejects a request without a token", async () => {
     const { status, data } = await w.call("GET", "/v1/students")

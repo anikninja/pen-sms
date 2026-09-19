@@ -29,7 +29,9 @@ const run = promisify(execFile)
 export const WORKER_DIR = fileURLToPath(new URL("..", import.meta.url))
 const CONFIG = path.join(WORKER_DIR, "wrangler.jsonc")
 const WRANGLER = path.join(WORKER_DIR, "node_modules", "wrangler", "bin", "wrangler.js")
-const BASE_URL = "http://sms-api.test"
+// The local dev server always shows the Worker plain http:// (it keeps only the hostname), and the
+// Worker refuses plain HTTP except on local hosts, so tests reach it as localhost.
+const BASE_URL = "http://localhost"
 
 /** Test-only secret; never used anywhere else. */
 export const TEST_SECRET = "worker-test-secret-0123456789-abcdefghijklmnop"
@@ -134,8 +136,9 @@ export async function startTestWorker(
     dev: { persist: dir, server: { port: 0 }, inspector: false, logLevel: "none" },
   })
 
-  const fetchWorker = async (pathAndQuery: string, init?: RequestInit) =>
-    (await worker.fetch(`${BASE_URL}${pathAndQuery}`, init as never)) as unknown as Response
+  // A path is sent to BASE_URL; an absolute URL (e.g. plain http://) is sent as it is.
+  const fetchWorker = async (pathOrUrl: string, init?: RequestInit) =>
+    (await worker.fetch(/^https?:\/\//.test(pathOrUrl) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`, init as never)) as unknown as Response
 
   const call: TestWorker["call"] = async (method, pathAndQuery, callOptions = {}) => {
     const body = callOptions.rawBody ?? (callOptions.body === undefined ? null : JSON.stringify(callOptions.body))

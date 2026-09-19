@@ -16,6 +16,7 @@ Browser ──► Next.js (Vercel) ──HTTPS + signed token──► Worker �
 | | |
 |---|---|
 | Base path | `/v1` (and `/health`) |
+| Transport | HTTPS only. Plain `http://` to a public hostname is `403 "HTTPS is required."` before any other check (Cloudflare serves the custom domain over HTTP too, and a signed request must never travel unencrypted). `localhost`, `127.0.0.1` and `[::1]` are exempt for local development |
 | Bodies | JSON (`Content-Type: application/json`), at most 256 KB |
 | IDs | UUIDs. A malformed id is `404` (as in the Next.js API) |
 | Money | Decimal strings with 2 places: `"150000.00"`. Never numbers, never minor units |

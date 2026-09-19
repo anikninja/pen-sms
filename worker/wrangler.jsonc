@@ -1,10 +1,14 @@
 // Cloudflare Worker for PEN SMS: the API and database boundary (see API.md).
-// Resource IDs below are placeholders until Phase 8 (Cloudflare deployment). Secrets are never
-// written here: locally they come from worker/.dev.vars (git-ignored), in Cloudflare from
-// `wrangler secret put`.
+// The top level is for local development (`wrangler dev`, tests); production is `env.production`
+// (docs/deployment.md). Secrets are never written here: locally they come from worker/.dev.vars
+// (git-ignored), in Cloudflare from Wrangler secrets.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "inxapp-sms-api",
+  // Not the production name: a `wrangler deploy` without `--env production` can never replace the
+  // production Worker, and it gets no public URL.
+  "name": "inxapp-sms-api-local",
+  "workers_dev": false,
+  "preview_urls": false,
   "main": "src/index.ts",
   // Must not be later than the bundled workerd supports (wrangler 4.135 → workerd 2026-09-18).
   "compatibility_date": "2026-09-01",
@@ -19,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "inxapp-sms",
-      // Placeholder: replaced by the real database id in Phase 8. Local development ignores it.
+      // Local development only (its value just names the local database file); never deployed.
       "database_id": "00000000-0000-4000-8000-000000000000",
       // The D1 SQL migrations (never the PostgreSQL ones in prisma/migrations).
       "migrations_dir": "../prisma/d1/migrations"
@@ -41,11 +45,11 @@
   },
 
   // `wrangler deploy --env production` (docs/deployment.md). Bindings and vars are not inherited
-  // from the top level, so they are repeated here. The secret WORKER_INTERNAL_SECRET is set with
-  // `wrangler secret put WORKER_INTERNAL_SECRET --env production`, never in this file.
+  // from the top level, so they are repeated here. The secret WORKER_INTERNAL_SECRET is uploaded
+  // with `wrangler deploy --env production --secrets-file <file outside the repo>`, never in this file.
   "env": {
     "production": {
-      // Deployed as "inxapp-sms-api" (without an "-production" suffix).
+      // Deployed as "inxapp-sms-api" (the name, not "<top-level name>-production").
       "name": "inxapp-sms-api",
       // Only reachable at the API hostname: no *.workers.dev URL, no preview URLs.
       "workers_dev": false,
@@ -56,8 +60,8 @@
         {
           "binding": "DB",
           "database_name": "inxapp-sms",
-          // Set to the id printed by `wrangler d1 create inxapp-sms` (an identifier, not a secret).
-          "database_id": "00000000-0000-4000-8000-000000000000",
+          // From `wrangler d1 create inxapp-sms --location apac` (an identifier, not a secret).
+          "database_id": "c42f77c8-7337-4cab-956f-aa2689d844f7",
           "migrations_dir": "../prisma/d1/migrations"
         }
       ],

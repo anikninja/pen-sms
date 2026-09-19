@@ -41,7 +41,7 @@ const bytes = (text: string) => new TextEncoder().encode(text)
 /** Path + query of a URL the Worker returned (the test Worker is reached through w.fetch). */
 const local = (url: string) => {
   const parsed = new URL(url)
-  expect(parsed.origin).toBe("http://sms-api.test")
+  expect(parsed.origin).toBe("http://localhost")
   return parsed.pathname + parsed.search
 }
 
@@ -160,16 +160,16 @@ describe("uploading", () => {
 
   it("refuses missing, forged, expired and wrong-kind tokens", async () => {
     const invalid = "This upload link is invalid or has expired. Please try again."
-    expect(await put("http://sms-api.test/v1/uploads", bytes("x"), PDF)).toMatchObject({ status: 401, data: { error: invalid } })
-    expect((await put("http://sms-api.test/v1/uploads?token=v1.abc.def", bytes("x"), PDF)).status).toBe(401)
+    expect(await put("http://localhost/v1/uploads", bytes("x"), PDF)).toMatchObject({ status: 401, data: { error: invalid } })
+    expect((await put("http://localhost/v1/uploads?token=v1.abc.def", bytes("x"), PDF)).status).toBe(401)
 
     const claims = { sub: nusrat(), sid: w.users.get("nusrat.jahan@student.pensms.test")!.studentId!, aid: ASSESSMENT.ALGO, name: "a.pdf", type: PDF, size: 1 }
     const expired = await signFileToken(TEST_SECRET, { typ: "upload", ...claims }, new Date(Date.now() - 10 * 60_000))
-    expect((await put(`http://sms-api.test/v1/uploads?token=${expired.token}`, bytes("x"), PDF)).status).toBe(401)
+    expect((await put(`http://localhost/v1/uploads?token=${expired.token}`, bytes("x"), PDF)).status).toBe(401)
     const forged = await signFileToken("another-secret-of-sufficient-length-123456", { typ: "upload", ...claims })
-    expect((await put(`http://sms-api.test/v1/uploads?token=${forged.token}`, bytes("x"), PDF)).status).toBe(401)
+    expect((await put(`http://localhost/v1/uploads?token=${forged.token}`, bytes("x"), PDF)).status).toBe(401)
     const wrongKind = await signFileToken(TEST_SECRET, { typ: "download", sub: nusrat(), fid: NUSRAT_DB_SUBMISSION, key: "k" })
-    expect((await put(`http://sms-api.test/v1/uploads?token=${wrongKind.token}`, bytes("x"), PDF)).status).toBe(401)
+    expect((await put(`http://localhost/v1/uploads?token=${wrongKind.token}`, bytes("x"), PDF)).status).toBe(401)
   })
 
   it("keeps exactly one row and one object when uploads race", async () => {
@@ -255,7 +255,7 @@ describe("CORS for direct browser uploads", () => {
     const granted = await requestUpload(nusrat(), ASSESSMENT.ALGO, { name: "c.pdf", type: PDF, size: 4 })
     const r = await put(granted.data.upload.url, bytes("%PDF"), PDF, ALLOWED_ORIGIN)
     expect(r.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN)
-    const err = await put("http://sms-api.test/v1/uploads", bytes("x"), PDF, "https://evil.test")
+    const err = await put("http://localhost/v1/uploads", bytes("x"), PDF, "https://evil.test")
     expect(err.headers.get("access-control-allow-origin")).toBeNull()
   })
 })

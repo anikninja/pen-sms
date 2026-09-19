@@ -8,13 +8,16 @@
  *    already has data (unique keys), so they can never overwrite anything;
  * 3. writes <out>/files/<key>: the submission PDFs, and <out>/r2-commands.txt to upload them.
  *
- *   node node_modules/tsx/dist/cli.mjs worker/scripts/prepare-remote-seed.ts [--out <dir>]
+ *   node node_modules/tsx/dist/cli.mjs worker/scripts/prepare-remote-seed.ts --password-file <file> [--out <dir>]
  *
- * The output contains the demo accounts' bcrypt hashes (password "Password123!"): keep it out of git
- * (the default location, worker/.wrangler/remote-seed, is git-ignored) and delete it after use.
+ * --password-file: a text file (outside the repository) holding the demo accounts' password. The
+ *   public default "Password123!" is in this repository, so a public site must not use it; pass
+ *   --public-demo-password instead of --password-file only to use it on purpose.
+ * --out: must be inside worker/.wrangler (git-ignored; default worker/.wrangler/remote-seed). It is
+ *   emptied first. The output contains the demo accounts' bcrypt hashes: delete it after use.
  */
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -29,9 +32,36 @@ const WORKER_DIR = path.join(__dirname, "..")
 // Parents before children, so every foreign key already exists when its row is inserted.
 const TABLES = ["Programme", "ProgrammeFee", "Student", "StudentFee", "User", "Payment", "Assessment", "Submission", "Result"]
 
+const GENERATED_DIR = path.join(WORKER_DIR, ".wrangler")
+
+function argValue(name: string): string | undefined {
+  const index = process.argv.indexOf(name)
+  if (index === -1) return undefined
+  const value = process.argv[index + 1]
+  if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`)
+  return value
+}
+
+/** The output folder; it is deleted and recreated, so it must stay inside worker/.wrangler. */
 function outDir(): string {
-  const index = process.argv.indexOf("--out")
-  return index === -1 ? path.join(WORKER_DIR, ".wrangler", "remote-seed") : path.resolve(process.argv[index + 1])
+  const out = path.resolve(argValue("--out") ?? path.join(GENERATED_DIR, "remote-seed"))
+  const relative = path.relative(GENERATED_DIR, out)
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`--out must be a folder inside ${GENERATED_DIR}, because it is emptied first.`)
+  }
+  return out
+}
+
+/** The demo accounts' password: from --password-file, or the public default only when asked for. */
+function demoPassword(): string | undefined {
+  const file = argValue("--password-file")
+  if (file) {
+    const password = readFileSync(file, "utf8").trim()
+    if (password.length < 12) throw new Error("The demo password must be at least 12 characters.")
+    return password
+  }
+  if (process.argv.includes("--public-demo-password")) return undefined
+  throw new Error('Pass --password-file <file> (recommended), or --public-demo-password to use the public "Password123!".')
 }
 
 function sqlValue(value: unknown): string {
@@ -47,6 +77,7 @@ function sqlValue(value: unknown): string {
 
 async function main() {
   const out = outDir()
+  const password = demoPassword()
   const state = mkdtempSync(path.join(os.tmpdir(), "pen-sms-remote-seed-"))
   try {
     execFileSync(process.execPath, [path.join(WORKER_DIR, "node_modules", "wrangler", "bin", "wrangler.js"), "d1", "migrations", "apply", "DB", "--local", "--persist-to", state], {
@@ -62,7 +93,7 @@ async function main() {
     })
     const db = new PrismaClient({ adapter: new PrismaD1(proxy.env.DB) })
     try {
-      const { counts, files } = await seedD1(db)
+      const { counts, files } = await seedD1(db, new Date(), { password })
 
       const lines = [
         `-- PEN SMS demo data for an EMPTY production D1 database (generated ${new Date().toISOString()}).`,
@@ -91,6 +122,7 @@ async function main() {
       writeFileSync(path.join(out, "r2-commands.txt"), commands.join("\n") + "\n")
 
       console.log("Demo data prepared:", counts)
+      console.log(`  demo password: ${password ? "from --password-file" : 'the public default "Password123!"'}`)
       console.log(`  ${path.join(out, "seed.sql")}`)
       console.log(`  ${files.length} files in ${path.join(out, "files")} (upload commands: r2-commands.txt)`)
       console.log("Review seed.sql, apply it only to the new, empty database, then delete the folder.")

@@ -83,6 +83,18 @@ async function readBody(request: Request, limit: number): Promise<Uint8Array | n
   return body.byteLength > limit ? null : body
 }
 
+/** Hosts that may be called over plain HTTP: local development (wrangler dev, tests) only. */
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
+
+/**
+ * True for a plain-HTTP request to a public hostname. Cloudflare serves the custom domain over HTTP
+ * too unless the zone forces HTTPS, and a signed request must never travel unencrypted, so these are
+ * refused (not redirected: a redirect would come after the request was already sent in the clear).
+ */
+function isInsecure(url: URL): boolean {
+  return url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname)
+}
+
 /** The request's Origin when it is one of ALLOWED_ORIGINS, else null. */
 function allowedOrigin(request: Request, env: Env): string | null {
   const origin = request.headers.get("Origin")
@@ -105,6 +117,8 @@ function withHeaders(response: Response, headers: Record<string, string>): Respo
 export async function handle(request: Request, env: Env): Promise<Response> {
   const now = new Date()
   const url = new URL(request.url)
+
+  if (isInsecure(url)) return json({ error: "HTTPS is required.", code: "FORBIDDEN" }, 403)
 
   // CORS preflight, only for the routes browsers call directly (file uploads).
   if (request.method === "OPTIONS") {

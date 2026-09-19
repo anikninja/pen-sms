@@ -3,20 +3,35 @@
  * sign-in lookup, session, a database read, authorization, a database write, and an R2 upload and
  * download. Needs the Worker's internal secret, which it only uses in memory.
  *
- *   WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET=… \
+ *   WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=<secrets file> \
  *     node node_modules/tsx/dist/cli.mjs worker/scripts/smoke-remote.ts
  *
- * Every write is put back: the result's publish flag is restored, and the uploaded test file is
- * replaced again by the original demo file (only its upload time changes). Works against the local
- * Worker too (http://127.0.0.1:8787), which is how it is tested.
+ * The secret comes from WORKER_INTERNAL_SECRET_FILE (the JSON file given to `wrangler deploy
+ * --secrets-file`, or a file holding just the value), so it never appears on a command line;
+ * WORKER_INTERNAL_SECRET works too.
+ *
+ * Every write is put back: an already-published result is withheld and published again (a withheld
+ * grade is never shown), and the uploaded test file is replaced again by the original demo file
+ * (only its upload time changes). Works against the local Worker too (http://127.0.0.1:8787), which
+ * is how it is tested.
  */
+import { readFileSync } from "node:fs"
+
 import { signApiToken } from "../../src/lib/internal-auth/token"
 
+function secretFromFile(file: string): string {
+  const text = readFileSync(file, "utf8").trim()
+  if (!text.startsWith("{")) return text
+  const value = (JSON.parse(text) as Record<string, unknown>).WORKER_INTERNAL_SECRET
+  if (typeof value !== "string") throw new Error(`${file} has no WORKER_INTERNAL_SECRET.`)
+  return value
+}
+
 const BASE = process.env.WORKER_API_URL
-const SECRET = process.env.WORKER_INTERNAL_SECRET
+const SECRET = process.env.WORKER_INTERNAL_SECRET_FILE ? secretFromFile(process.env.WORKER_INTERNAL_SECRET_FILE) : process.env.WORKER_INTERNAL_SECRET
 const APP_ORIGIN = process.env.APP_ORIGIN ?? "https://sms.inxapp.net"
 if (!BASE || !SECRET) {
-  console.error("Set WORKER_API_URL and WORKER_INTERNAL_SECRET.")
+  console.error("Set WORKER_API_URL and WORKER_INTERNAL_SECRET_FILE (or WORKER_INTERNAL_SECRET).")
   process.exit(1)
 }
 
@@ -48,6 +63,13 @@ async function main() {
   const healthBody = (await health.json()) as { status: string; schema?: { latestMigration: string | null } }
   check("health: Worker, D1 and schema", health.status === 200 && healthBody.status === "ok" && healthBody.schema?.latestMigration === "0001_baseline.sql", healthBody)
 
+  if (new URL(BASE!).protocol === "https:") {
+    const plain = new URL("/health", BASE)
+    plain.protocol = "http:"
+    const insecure = await fetch(plain, { redirect: "manual" })
+    check("plain HTTP → 403 (HTTPS only)", insecure.status === 403, insecure.status)
+  }
+
   const unsigned = await fetch(new URL("/v1/students", BASE))
   check("unsigned request → 401", unsigned.status === 401)
 
@@ -66,17 +88,29 @@ async function main() {
   check("authorization: a student on a staff route → 403", (await call("GET", "/v1/students", rahimId)).status === 403)
   check("authorization: staff on a student route → 403", (await call("GET", "/v1/me/marksheet", staffId)).status === 403)
 
-  // Database write, then put back.
+  // Database write, then put back: withhold an already-published result and publish it again, so a
+  // withheld grade is never shown to a student, not even for a moment.
+  type GradingRow = { student: { id: string }; result: { published: boolean } | null }
+  let target: { path: string } | null = null
   const results = await call("GET", "/v1/views/results", staffId)
-  const row = results.data.grading?.rows.find((r: { result: unknown }) => r.result)
-  if (row) {
-    const path = `/v1/students/${row.student.id}/results/${results.data.selectedId}`
-    const before: boolean = row.result.published
-    const flipped = await call("PATCH", path, staffId, { published: !before })
-    const restored = await call("PATCH", path, staffId, { published: before })
-    check("database write: publish flag changed and restored", flipped.status === 200 && flipped.data.result.published === !before && restored.data.result.published === before)
+  for (const { id } of (results.data.assessments ?? []) as { id: string }[]) {
+    const view = id === results.data.selectedId ? results : await call("GET", `/v1/views/results?assessment=${encodeURIComponent(id)}`, staffId)
+    const row = (view.data.grading?.rows as GradingRow[] | undefined)?.find((r) => r.result?.published)
+    if (row) {
+      target = { path: `/v1/students/${row.student.id}/results/${id}` }
+      break
+    }
+  }
+  if (target) {
+    const withheld = await call("PATCH", target.path, staffId, { published: false })
+    const republished = await call("PATCH", target.path, staffId, { published: true })
+    check(
+      "database write: a published result withheld and published again",
+      withheld.status === 200 && withheld.data.result.published === false && republished.status === 200 && republished.data.result.published === true,
+      { withheld: withheld.status, republished: republished.status }
+    )
   } else {
-    check("database write: a graded result to toggle exists", false)
+    check("database write: a published result to toggle exists", false)
   }
 
   // R2 upload and download, then put the original demo file back.

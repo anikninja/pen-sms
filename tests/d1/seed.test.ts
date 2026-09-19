@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { seedD1 } from "../../prisma/d1/seed"
@@ -51,4 +52,20 @@ describe("D1 seed", () => {
     const [abir] = await listStudents(asD1(t.db), { q: "abir" })
     expect((await getStudentFeeSummary(asD1(t.db), abir.id, now)).outstanding).toBe("150000.00")
   })
+
+  it("uses the public demo password by default, and a given password instead of it", async () => {
+    // Every demo account gets the same hash, so one comparison covers all of them.
+    const distinctHashes = async () => [...new Set((await t.db.user.findMany({ select: { passwordHash: true } })).map((user) => user.passwordHash))]
+
+    const [publicHash, ...otherPublic] = await distinctHashes()
+    expect(otherPublic).toEqual([])
+    expect(await bcrypt.compare("Password123!", publicHash)).toBe(true)
+
+    await seedD1(asD1(t.db), now, { password: "a-private-demo-password" })
+    const [privateHash, ...otherPrivate] = await distinctHashes()
+    expect(otherPrivate).toEqual([])
+    expect(await t.db.user.count()).toBe(EXPECTED.users)
+    expect(await bcrypt.compare("a-private-demo-password", privateHash)).toBe(true)
+    expect(await bcrypt.compare("Password123!", privateHash)).toBe(false)
+  }, 30_000)
 })
