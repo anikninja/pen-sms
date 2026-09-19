@@ -49,7 +49,10 @@ Every other endpoint needs a token signed with the same secret, which the Next.j
 npm run test:worker                     # repository root: integration tests (each file starts its own Worker)
 npm --prefix worker run typecheck       # Worker source (Workers types) and tests (Node types)
 npm --prefix worker run build           # bundle into worker/dist without deploying (dry run)
+npm run test:e2e:cloudflare             # repository root: Next.js → Worker → local D1/R2, end to end
 ```
+
+The complete local workflow with Next.js, the end-to-end suite, consistency checks and performance numbers is in [docs/local-cloudflare.md](../docs/local-cloudflare.md).
 
 ## Size and CPU
 

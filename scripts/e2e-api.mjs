@@ -1,12 +1,16 @@
-// End-to-end checks for the JSON API (architecture.md §17.1, §25.1).
+// End-to-end checks for the JSON API (architecture.md §17.1, §25.1), for either data backend.
 // Needs a freshly seeded database and a running app:
-//   npx prisma migrate reset --force && npm run build && npx next start -p 3100
-//   npm run test:e2e
+//   PostgreSQL: npx prisma migrate reset --force && npm run build && npx next start -p 3100
+//               npm run test:e2e
+//   Cloudflare: npm run test:e2e:cloudflare   (scripts/e2e-cloudflare-local.mjs sets E2E_BACKEND=worker)
 // It changes data, so reset the database afterwards.
 import fs from "node:fs"
 import path from "node:path"
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3100"
+// "postgres": files on the local disk (checked directly). "worker": files in R2 (checked by
+// worker/scripts/check-consistency.ts after the run), plus the direct-upload endpoints.
+const BACKEND = process.env.E2E_BACKEND ?? "postgres"
 const UPLOADS = path.join(process.cwd(), "storage", "uploads")
 const YEAR = new Date().getFullYear()
 const PASSWORD = "Password123!"
@@ -18,7 +22,7 @@ function check(name, condition, detail) {
   else failures.push(`${name}${detail === undefined ? "" : ` → ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`)
 }
 
-async function login(email, password = PASSWORD) {
+async function tryLogin(email, password = PASSWORD) {
   const jar = new Map()
   const store = (res) => {
     for (const c of res.headers.getSetCookie()) {
@@ -38,18 +42,23 @@ async function login(email, password = PASSWORD) {
     body: new URLSearchParams({ csrfToken, email, password }),
   })
   store(res)
-  if (![...jar.keys()].some((k) => k.includes("session-token"))) throw new Error(`login failed for ${email}`)
-  return cookie()
+  return [...jar.keys()].some((k) => k.includes("session-token")) ? { cookie: cookie(), jar } : null
 }
 
-async function api(cookie, method, path, body, extraHeaders = {}) {
+async function login(email, password = PASSWORD) {
+  const session = await tryLogin(email, password)
+  if (!session) throw new Error(`login failed for ${email}`)
+  return session.cookie
+}
+
+async function api(cookie, method, path, body, extraHeaders = {}, redirect = "follow") {
   const headers = { ...(cookie ? { cookie } : {}), ...extraHeaders }
   let payload = body
   if (body !== undefined && !(body instanceof FormData) && typeof body !== "string") {
     headers["content-type"] = "application/json"
     payload = JSON.stringify(body)
   }
-  const res = await fetch(`${BASE}${path}`, { method, headers, body: payload })
+  const res = await fetch(`${BASE}${path}`, { method, headers, body: payload, redirect })
   const type = res.headers.get("content-type") ?? ""
   const data = type.includes("json") ? await res.json() : Buffer.from(await res.arrayBuffer())
   return { status: res.status, data, headers: res.headers }
@@ -63,7 +72,7 @@ const upload = (file) => {
   form.append("file", file)
   return form
 }
-const uploadsCount = () => fs.readdirSync(UPLOADS).filter((f) => f !== ".gitkeep").length
+const uploadsCount = () => (BACKEND === "postgres" ? fs.readdirSync(UPLOADS).filter((f) => f !== ".gitkeep").length : 0)
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
 const staff = await login("registry@pensms.test")
@@ -82,6 +91,30 @@ check("no session → 401", (await api(null, "GET", "/api/students")).status ===
 }
 check("staff on /api/me/marksheet → 403", (await api(staff, "GET", "/api/me/marksheet")).status === 403)
 check("staff uploading a submission → 403", (await api(staff, "POST", `/api/assessments/5e3d0a1c-0000-4000-8000-000000000102/submissions`, upload(pdfFile()))).status === 403)
+
+// ─── Sign-in, sessions and sign-out ──────────────────────────────────────────
+check("wrong password is refused", (await tryLogin("registry@pensms.test", "wrong-password")) === null)
+check("unknown email is refused", (await tryLogin("nobody@pensms.test")) === null)
+{
+  const forged = "authjs.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIn0..forged.forged.forged"
+  check("tampered or expired session cookie → 401", (await api(forged, "GET", "/api/students")).status === 401)
+}
+{
+  const session = await tryLogin("registry@pensms.test")
+  check("fresh session works", (await api(session.cookie, "GET", "/api/students")).status === 200)
+  const csrf = await fetch(`${BASE}/api/auth/csrf`, { headers: { cookie: session.cookie } })
+  const { csrfToken } = await csrf.json()
+  const out = await fetch(`${BASE}/api/auth/signout`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: session.cookie },
+    body: new URLSearchParams({ csrfToken }),
+  })
+  const cleared = out.headers.getSetCookie().some((c) => c.includes("session-token=;") || /session-token=[^;]*;.*(Max-Age=0|Expires=Thu, 01 Jan 1970)/i.test(c))
+  check("sign-out clears the session cookie", cleared, out.headers.getSetCookie())
+  const withoutCookie = session.cookie.split("; ").filter((c) => !c.includes("session-token")).join("; ")
+  check("after sign-out the browser has no session → 401", (await api(withoutCookie, "GET", "/api/students")).status === 401)
+}
 
 // ─── Students: search & filters ──────────────────────────────────────────────
 const all = await api(staff, "GET", "/api/students")
@@ -233,6 +266,16 @@ const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).forma
   const badSource = await api(staff, "PUT", `/api/students/${sid(2)}/fee`, { source: "NOPE" })
   check("invalid fee source → 400", badSource.status === 400, badSource.data)
 }
+// Race: concurrent fee changes for one student leave exactly one fee, never below what was paid.
+{
+  const amounts = ["130000", "140000", "150000", "160000", "170000"]
+  const results = await Promise.all(amounts.map((amount) => api(staff, "PUT", `/api/students/${sid(2)}/fee`, { source: "MANUAL", amount, dueDate: `${YEAR + 1}-02-28` })))
+  check("concurrent fee assignments all succeed", results.every((r) => r.status === 200), results.map((r) => r.status))
+  const s = (await api(staff, "GET", `/api/students/${sid(2)}/fees`)).data.summary
+  check("one fee remains, one of the requested amounts, paid unchanged", amounts.map((a) => `${a}.00`).includes(s.totalFee) && s.totalPaid === "100000.50", s)
+  const back = await api(staff, "PUT", `/api/students/${sid(2)}/fee`, { source: "TARIFF" })
+  check("fee back to the tariff", back.status === 200 && back.data.summary.totalFee === "150000.00", back.data)
+}
 // No tariff for the year → no fee, payments blocked
 {
   const noTariff = await api(staff, "POST", "/api/students", { ...newStudent, email: "notariff@e2e.test", password: undefined, academicYear: YEAR + 1 })
@@ -293,11 +336,11 @@ const ACC = "5e3d0a1c-0000-4000-8000-000000000104"
   const first = await api(rahim, "POST", `/api/assessments/${ALGO}/submissions`, upload(pdfFile("../../evil/Algo Draft.pdf")))
   check("first submission before deadline → 201 on time", first.status === 201 && first.data.submission.isLate === false && first.data.submission.replaced === false, first.data)
   check("path stripped from file name", first.data.submission?.fileName === "Algo Draft.pdf", first.data.submission?.fileName)
-  check("one file written", uploadsCount() === before + 1)
+  if (BACKEND === "postgres") check("one file written", uploadsCount() === before + 1)
 
   const replaced = await api(rahim, "POST", `/api/assessments/${ALGO}/submissions`, upload(docxFile("Algo Final.docx")))
   check("resubmission before deadline → 200 replaced (same row)", replaced.status === 200 && replaced.data.submission.replaced && replaced.data.submission.id === first.data.submission.id, replaced.data)
-  check("old file deleted after replacement", uploadsCount() === before + 1)
+  if (BACKEND === "postgres") check("old file deleted after replacement", uploadsCount() === before + 1)
 
   const dl = await api(rahim, "GET", `/api/files/${replaced.data.submission.id}`)
   check("student downloads own file", dl.status === 200 && dl.data.toString() === "PK docx" && dl.headers.get("content-disposition")?.includes("Algo%20Final.docx"), dl.headers.get("content-disposition"))
@@ -328,6 +371,28 @@ check("other programme's assessment → 404", (await api(farhana, "POST", `/api/
 {
   const r = await api(farhana, "POST", `/api/assessments/${ACC}/submissions`, upload(pdfFile()))
   check("closed assessment → 409 message", r.status === 409 && r.data.error === "This assessment is closed for submissions.", r.data)
+}
+
+// ─── Direct uploads to the Worker (Cloudflare backend only) ──────────────────
+if (BACKEND === "worker") {
+  const bad = await api(rahim, "POST", `/api/assessments/${ALGO}/submissions/upload-url`, { fileName: "x.txt", fileType: "text/plain", fileSize: 3 })
+  check("upload URL refused for a .txt", bad.status === 400 && bad.data.error === "Only PDF and DOCX files are accepted.", bad.data)
+  const staffTry = await api(staff, "POST", `/api/assessments/${ALGO}/submissions/upload-url`, { fileName: "x.pdf", fileType: "application/pdf", fileSize: 3 })
+  check("upload URL refused for staff", staffTry.status === 403, staffTry.status)
+
+  const body = "%PDF-1.4 direct upload"
+  const grant = await api(rahim, "POST", `/api/assessments/${ALGO}/submissions/upload-url`, { fileName: "Direct.pdf", fileType: "application/pdf", fileSize: body.length })
+  check("upload URL issued for a valid PDF", grant.status === 200 && grant.data.upload.method === "PUT", grant.data)
+  const put = await fetch(grant.data.upload.url, { method: "PUT", headers: grant.data.upload.headers, body })
+  const putBody = await put.json()
+  check("file PUT straight to the Worker replaces the submission", put.status === 200 && putBody.submission.replaced === true, putBody)
+  const again = await fetch(grant.data.upload.url, { method: "PUT", headers: grant.data.upload.headers, body: "%PDF-1.4 other bytes!" })
+  check("an upload URL only accepts the declared file", again.status === 400, again.status)
+
+  const redirect = await api(rahim, "GET", `/api/files/${putBody.submission.id}`, undefined, {}, "manual")
+  check("download is a redirect to a short-lived Worker URL", redirect.status === 302 && /\/v1\/files\/download\?token=/.test(redirect.headers.get("location") ?? ""), redirect.status)
+  const file = await api(rahim, "GET", `/api/files/${putBody.submission.id}`)
+  check("following it returns the file from R2", file.status === 200 && file.data.toString() === body, file.status)
 }
 
 // ─── File downloads ──────────────────────────────────────────────────────────

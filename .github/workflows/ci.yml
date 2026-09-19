@@ -54,6 +54,46 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+  cloudflare:
+    name: Worker tests and Cloudflare end-to-end (local D1/R2)
+    needs: branch-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Test-only secret for signing session cookies inside this job. The Worker secret is generated
+      # per run by scripts/e2e-cloudflare-local.mjs and never stored.
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix worker
+
+      - name: Check the D1 schema
+        run: npx prisma validate --schema prisma/d1/schema.prisma
+
+      - name: Type-check the Worker
+        run: npm --prefix worker run typecheck
+
+      - name: Build the Worker (dry run, no deploy)
+        run: npm --prefix worker run build
+
+      - name: Worker integration tests
+        run: npm run test:worker
+
+      - name: End-to-end (Next.js → Worker → local D1/R2)
+        run: npm run test:e2e:cloudflare
+
   integration:
     name: Migrate, seed, build and API tests
     needs: branch-guard
