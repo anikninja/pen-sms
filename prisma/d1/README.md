@@ -88,7 +88,13 @@ These facts were measured with the real stack: wrangler's local D1, adapter 6.12
 
 ### DateTime encoding
 
-`@prisma/adapter-d1` stores `DateTime` as **ISO-8601 text** (`2026-09-19T00:00:00.000Z`, measured). Prisma's native SQLite engine, used by `tests/d1/` and `seed-local.ts`, stores **integer milliseconds** instead. The code therefore:
+`@prisma/adapter-d1` stores `DateTime` as **ISO-8601 text** (measured). There are two spellings:
+- Prisma model writes use `2026-09-19T12:17:09.840+00:00`, with the milliseconds left out when they are zero.
+- `Date` parameters of raw SQL use `2026-09-19T00:00:00.000Z`.
+
+Both read back as the same `Date`. Text order matches time order across the two spellings, except that two values for the **same** instant compare as different. So sorting is correct except among rows with identical timestamps, and the one SQL date comparison (`dueDate < now` in `getOverdueStudents`, which no Worker route uses yet) is correct except at the exact instant.
+
+Prisma's native SQLite engine, used by `tests/d1/` and `seed-local.ts`, stores **integer milliseconds** instead. The code therefore:
 - never compares dates in raw SQL (date filters stay in Prisma queries);
 - passes `Date` values to raw SQL as parameters, so each engine encodes them its own way;
 - does not load data written by the native engine into real D1.

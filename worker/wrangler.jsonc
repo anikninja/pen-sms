@@ -38,5 +38,33 @@
   "vars": {
     // Browser origins allowed to upload files to the Worker directly (CORS). Comma-separated.
     "ALLOWED_ORIGINS": "http://localhost:3000"
+  },
+
+  // `wrangler deploy --env production` (docs/deployment.md). Bindings and vars are not inherited
+  // from the top level, so they are repeated here. The secret WORKER_INTERNAL_SECRET is set with
+  // `wrangler secret put WORKER_INTERNAL_SECRET --env production`, never in this file.
+  "env": {
+    "production": {
+      // Deployed as "inxapp-sms-api" (without an "-production" suffix).
+      "name": "inxapp-sms-api",
+      // Only reachable at the API hostname: no *.workers.dev URL, no preview URLs.
+      "workers_dev": false,
+      "preview_urls": false,
+      // sms.inxapp.net stays with the Next.js app on Vercel; the Worker gets its own hostname.
+      "routes": [{ "pattern": "sms-api.inxapp.net", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "inxapp-sms",
+          // Set to the id printed by `wrangler d1 create inxapp-sms` (an identifier, not a secret).
+          "database_id": "00000000-0000-4000-8000-000000000000",
+          "migrations_dir": "../prisma/d1/migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "inxapp-sms-files" }],
+      "vars": {
+        "ALLOWED_ORIGINS": "https://sms.inxapp.net"
+      }
+    }
   }
 }
