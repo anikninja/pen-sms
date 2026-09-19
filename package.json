@@ -12,6 +12,7 @@
     "db:seed": "prisma db seed",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:worker": "vitest run --config worker/vitest.config.mts",
     "test:e2e": "node scripts/e2e-api.mjs"
   },
   "dependencies": {

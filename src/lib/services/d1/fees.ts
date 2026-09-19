@@ -18,15 +18,18 @@ import { DomainError, fieldConflict, isUniqueViolation } from "@/lib/errors"
 import { formatMoney, parseMoney } from "@/lib/money"
 import type { D1Client } from "@/lib/services/d1/client"
 import {
+  buildFeeOverviewRow,
   buildFeeSummary,
   DUPLICATE_PAYMENT_REFERENCE,
   feeAssignmentRejected,
   NO_TARIFF,
   paymentRejected,
   toOverdueStudents,
+  type FeeOverviewRow,
   type FeeSummary,
   type OverdueStudent,
   type PaymentDto,
+  type TariffDto,
 } from "@/lib/services/shared/fees"
 import { STUDENT_NOT_FOUND } from "@/lib/services/shared/students"
 import { toIsoDate } from "@/lib/utils/format"
@@ -56,6 +59,61 @@ export async function getStudentFeeSummary(db: D1Client, studentId: string, now 
     }),
   ])
   return buildFeeSummary({ fee: student.fee, totalPaid: paid, tariff, now })
+}
+
+export async function listPayments(db: D1Client, studentId: string): Promise<PaymentDto[]> {
+  const rows = await db.payment.findMany({
+    where: { studentId },
+    orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+    select: { id: true, amount: true, paymentDate: true, referenceNumber: true, createdAt: true },
+  })
+  return rows.map((row) => ({ ...row, amount: formatMoney(row.amount), paymentDate: toIsoDate(row.paymentDate) }))
+}
+
+/** The tariff for the student's current programme and academic year, if one exists. */
+export async function getTariffForStudent(db: D1Client, studentId: string): Promise<TariffDto | null> {
+  const student = await db.student.findUnique({ where: { id: studentId }, select: { programmeId: true, academicYear: true } })
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
+  const tariff = await db.programmeFee.findUnique({
+    where: { programmeId_academicYear: { programmeId: student.programmeId, academicYear: student.academicYear } },
+    select: { amount: true, currency: true, dueDate: true },
+  })
+  return tariff ? { ...tariff, amount: formatMoney(tariff.amount) } : null
+}
+
+export async function getStudentFees(db: D1Client, studentId: string, now = new Date()) {
+  const [summary, payments, tariff] = await Promise.all([
+    getStudentFeeSummary(db, studentId, now),
+    listPayments(db, studentId),
+    getTariffForStudent(db, studentId),
+  ])
+  return { summary, payments, tariff }
+}
+
+/** Every student's fee position in two queries — for the Fees list and dashboard totals (§19, §21). */
+export async function listFeeOverview(
+  db: D1Client,
+  filter: { status?: FeeOverviewRow["status"] } = {},
+  now = new Date()
+): Promise<FeeOverviewRow[]> {
+  const [students, sums] = await Promise.all([
+    db.student.findMany({
+      orderBy: { studentId: "asc" },
+      select: {
+        id: true,
+        studentId: true,
+        fullName: true,
+        enrolmentStatus: true,
+        programme: { select: { code: true, name: true } },
+        fee: { select: { amount: true, currency: true, dueDate: true } },
+      },
+    }),
+    db.payment.groupBy({ by: ["studentId"], _sum: { amount: true } }),
+  ])
+  const paidByStudent = new Map(sums.map((sum) => [sum.studentId, sum._sum.amount ?? 0n]))
+
+  const rows = students.map(({ fee, ...student }) => buildFeeOverviewRow(student, fee, paidByStudent.get(student.id) ?? 0n, now))
+  return filter.status ? rows.filter((row) => row.status === filter.status) : rows
 }
 
 /**

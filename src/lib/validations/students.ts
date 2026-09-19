@@ -1,7 +1,7 @@
-import { EnrolmentStatus } from "@prisma/client"
 import { z } from "zod"
 
 import { ageOn, registryToday } from "@/lib/domain/dates"
+import { ENROLMENT_STATUSES } from "@/lib/domain/enums"
 import {
   emailSchema,
   idSchema,
@@ -29,7 +29,7 @@ export const academicYearSchema = z.coerce
     error: () => `Academic year must be between ${MIN_ACADEMIC_YEAR} and ${new Date().getFullYear() + 1}.`,
   })
 
-const enrolmentStatusSchema = z.enum(EnrolmentStatus, {
+const enrolmentStatusSchema = z.enum(ENROLMENT_STATUSES, {
   error: "Choose a valid enrolment status.",
 })
 
@@ -52,6 +52,17 @@ export const studentCreateSchema = z.object({
   ),
 })
 
+/** A bcrypt hash as stored in User.passwordHash: $2a$/$2b$/$2y$, a two-digit cost, 53 characters. */
+export const passwordHashSchema = z.string().regex(/^[$]2[aby][$]\d{2}[$][./A-Za-z0-9]{53}$/, "Invalid password hash.")
+
+/**
+ * What the Next.js server sends the Worker to create a student: the create input with the password
+ * replaced by its bcrypt hash. bcrypt runs in Next.js, not in the Worker (worker/API.md).
+ */
+export const studentCreateRecordSchema = studentCreateSchema
+  .omit({ password: true })
+  .extend({ passwordHash: passwordHashSchema.optional() })
+
 export const studentUpdateSchema = z
   .object(studentFields)
   .partial()
@@ -67,5 +78,6 @@ export const studentSearchSchema = z.object({
 })
 
 export type StudentCreateInput = z.output<typeof studentCreateSchema>
+export type StudentCreateRecord = z.output<typeof studentCreateRecordSchema>
 export type StudentUpdateInput = z.output<typeof studentUpdateSchema>
 export type StudentSearchInput = z.output<typeof studentSearchSchema>

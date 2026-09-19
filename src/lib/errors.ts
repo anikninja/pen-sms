@@ -10,6 +10,16 @@ export type ErrorCode =
 
 export type FieldErrors = Record<string, string[]>
 
+/** HTTP status for each error code, used by the Next.js API routes and by the Worker. */
+export const ERROR_STATUS: Record<ErrorCode, number> = {
+  VALIDATION: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  INTERNAL: 500,
+}
+
 /** Returned by every Server Action (architecture.md §31). Never throws to the client. */
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -59,6 +69,9 @@ export type UniqueViolation = {
 const SQLITE_UNIQUE = /(?:UNIQUE|PRIMARY KEY) constraint failed: ([^`\n]+)/
 // Prisma's rendering of a driver-adapter violation: "Unique constraint failed on the fields: (`email`)".
 const PRISMA_UNIQUE_FIELDS = /Unique constraint failed on the fields: \(([^)]*)\)/
+// Raw SQL through @prisma/adapter-d1 (P2010, meta.message): "Unique constraint failed: (email)" or,
+// when D1 names only the index, "Unique constraint failed: Student_email_key". Verified against local D1.
+const ADAPTER_UNIQUE = /Unique constraint failed: (?:\(([^)]*)\)|`?([A-Za-z0-9_]+)`?)/
 
 // "Payment.referenceNumber" or "Submission.studentId, Submission.assessmentId: SQLITE_CONSTRAINT" (D1 suffix).
 const columnsFromSqlite = (list: string) =>
@@ -72,7 +85,9 @@ const columnsFromSqlite = (list: string) =>
  * Describes a unique-constraint violation, or returns null for any other error. Handles every shape:
  * - PostgreSQL and Prisma's native SQLite engine: P2002 with `meta.target` (field list or constraint name)
  * - driver adapters such as @prisma/adapter-d1: P2002 with `meta.driverAdapterError.cause.constraint`
- * - raw SQL through Prisma (P2010) or D1 itself: only the SQLite message names the columns
+ * - raw SQL through Prisma (P2010) or D1 itself: only the message names the columns, in SQLite's
+ *   wording ("UNIQUE constraint failed: Payment.referenceNumber") or @prisma/adapter-d1's
+ *   ("Unique constraint failed: (referenceNumber)")
  */
 export function uniqueViolation(error: unknown): UniqueViolation | null {
   if (isPrismaKnownError(error) && error.code === "P2002") {
@@ -96,6 +111,12 @@ export function uniqueViolation(error: unknown): UniqueViolation | null {
     const rawMessage = isPrismaKnownError(error) ? String(error.meta?.message ?? error.message) : error.message
     const sqlite = SQLITE_UNIQUE.exec(rawMessage) ?? SQLITE_UNIQUE.exec(error.message)
     if (sqlite) return { fields: columnsFromSqlite(sqlite[1]), constraint: null }
+    const adapter = ADAPTER_UNIQUE.exec(rawMessage) ?? ADAPTER_UNIQUE.exec(error.message)
+    if (adapter) {
+      return adapter[1] !== undefined
+        ? { fields: adapter[1].split(",").map((field) => field.trim().replace(/`/g, "")).filter(Boolean), constraint: null }
+        : { fields: [], constraint: adapter[2] }
+    }
   }
   return null
 }

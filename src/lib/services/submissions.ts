@@ -1,40 +1,26 @@
 import { randomUUID } from "node:crypto"
 
-import {
-  canReplaceSubmission,
-  checkSubmissionFile,
-  isSubmissionLate,
-  submissionStatus,
-  type SubmissionStatus,
-} from "@/lib/domain/submissions"
 import type { Session } from "@/lib/auth/session"
+import { canReplaceSubmission, checkSubmissionFile, isSubmissionLate } from "@/lib/domain/submissions"
 import { DomainError, fieldError, isUniqueViolation } from "@/lib/errors"
 import { prisma } from "@/lib/prisma"
+import { ASSESSMENT_NOT_FOUND } from "@/lib/services/shared/assessments"
+import { STUDENT_NOT_FOUND } from "@/lib/services/shared/students"
+import {
+  ASSESSMENT_CLOSED,
+  DEADLINE_PASSED,
+  FILE_GONE,
+  FILE_NOT_FOUND,
+  NOT_ENROLLED,
+  safeFileName,
+  SUBMISSION_IN_PROGRESS,
+  toStudentAssessment,
+  type StudentAssessmentDto,
+  type SubmissionDto,
+} from "@/lib/services/shared/submissions"
 import { storage, storageKey } from "@/lib/storage"
 
-export type SubmissionDto = {
-  id: string
-  assessmentId: string
-  fileName: string
-  fileType: string
-  fileSize: number
-  submittedAt: Date
-  isLate: boolean
-}
-
-export type StudentAssessmentDto = {
-  id: string
-  title: string
-  module: string
-  submissionDeadline: Date
-  isOpen: boolean
-  isPastDeadline: boolean
-  status: SubmissionStatus
-  submission: SubmissionDto | null
-  /** Whether the upload control should be offered, and why not when it isn't. */
-  canUpload: boolean
-  uploadBlockedReason: string | null
-}
+export type { StudentAssessmentDto, SubmissionDto } from "@/lib/services/shared/submissions"
 
 const submissionSelect = {
   id: true,
@@ -45,15 +31,6 @@ const submissionSelect = {
   submittedAt: true,
   isLate: true,
 } as const
-
-const DEADLINE_PASSED = "The deadline has passed. Your existing submission can no longer be replaced."
-
-/** Strips any path and control characters from a client-supplied file name. */
-function safeFileName(name: string): string {
-  const base = name.split(/[\\/]/).pop() ?? ""
-  const cleaned = base.replace(/[\u0000-\u001f\u007f"]/g, "").trim()
-  return (cleaned || "submission").slice(0, 200)
-}
 
 /**
  * Creates or replaces the student's submission (architecture.md §9–§10, §32).
@@ -73,14 +50,14 @@ export async function submitAssessment(params: {
       select: { programmeId: true, isOpen: true, submissionDeadline: true },
     }),
   ])
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
   // Another programme's assessment is treated as non-existent for this student.
   if (!assessment || assessment.programmeId !== student.programmeId) {
-    throw new DomainError("NOT_FOUND", "Assessment not found.")
+    throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
   }
-  if (!assessment.isOpen) throw new DomainError("CONFLICT", "This assessment is closed for submissions.")
+  if (!assessment.isOpen) throw new DomainError("CONFLICT", ASSESSMENT_CLOSED)
   if (student.enrolmentStatus !== "ENROLLED") {
-    throw new DomainError("FORBIDDEN", "Only enrolled students can submit.")
+    throw new DomainError("FORBIDDEN", NOT_ENROLLED)
   }
 
   const check = checkSubmissionFile(file)
@@ -121,7 +98,7 @@ export async function submitAssessment(params: {
   } catch (error) {
     await storage.delete(key).catch(() => undefined)
     if (isUniqueViolation(error)) {
-      throw new DomainError("CONFLICT", "Your submission is already being saved. Refresh and try again.")
+      throw new DomainError("CONFLICT", SUBMISSION_IN_PROGRESS)
     }
     throw error
   }
@@ -140,7 +117,7 @@ export async function getStudentAssessments(studentId: string): Promise<StudentA
     where: { id: studentId },
     select: { programmeId: true, enrolmentStatus: true },
   })
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
 
   const now = new Date()
   const assessments = await prisma.assessment.findMany({
@@ -156,22 +133,7 @@ export async function getStudentAssessments(studentId: string): Promise<StudentA
     },
   })
 
-  return assessments.map(({ submissions, ...assessment }) => {
-    const submission = submissions[0] ?? null
-    let uploadBlockedReason: string | null = null
-    if (!assessment.isOpen) uploadBlockedReason = "This assessment is closed for submissions."
-    else if (student.enrolmentStatus !== "ENROLLED") uploadBlockedReason = "Only enrolled students can submit."
-    else if (submission && !canReplaceSubmission(now, assessment.submissionDeadline)) uploadBlockedReason = DEADLINE_PASSED
-
-    return {
-      ...assessment,
-      isPastDeadline: now.getTime() > assessment.submissionDeadline.getTime(),
-      status: submissionStatus(submission),
-      submission,
-      canUpload: uploadBlockedReason === null,
-      uploadBlockedReason,
-    }
-  })
+  return assessments.map((assessment) => toStudentAssessment(assessment, student.enrolmentStatus, now))
 }
 
 /**
@@ -185,14 +147,14 @@ export async function getSubmissionFile(submissionId: string, session: Session) 
   })
   const allowed =
     submission && (session.role === "STAFF" || (session.role === "STUDENT" && submission.studentId === session.studentId))
-  if (!submission || !allowed) throw new DomainError("NOT_FOUND", "File not found.")
+  if (!submission || !allowed) throw new DomainError("NOT_FOUND", FILE_NOT_FOUND)
 
   try {
     const content = await storage.read(submission.fileUrl)
     return { content, fileName: submission.fileName, fileType: submission.fileType }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new DomainError("NOT_FOUND", "The file is no longer available.")
+      throw new DomainError("NOT_FOUND", FILE_GONE)
     }
     throw error
   }

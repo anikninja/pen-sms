@@ -6,9 +6,8 @@ import { formatStudentId } from "@/lib/domain/student-id"
 import { DomainError } from "@/lib/errors"
 import { parseMoney } from "@/lib/money"
 import type { D1Client } from "@/lib/services/d1/client"
-import { createStudent, getStudent, updateStudent } from "@/lib/services/d1/students"
+import { createStudent, getStudent, updateStudent, type D1StudentCreateInput } from "@/lib/services/d1/students"
 import { DUPLICATE_EMAIL, DUPLICATE_LOGIN } from "@/lib/services/shared/students"
-import type { StudentCreateInput } from "@/lib/validations/students"
 
 import { addProgramme, addStudent, asD1, createTestDb, race, YEAR, type TestDb } from "./harness"
 
@@ -31,7 +30,10 @@ beforeEach(async () => {
   programmeId = programme.id
 })
 
-const input = (overrides: Partial<StudentCreateInput> = {}): StudentCreateInput => ({
+// Any bcrypt hash: the Next.js server hashes passwords, the D1 service only stores the hash.
+const PASSWORD_HASH = "$2b$10$zYlrVsFIjKv7dBLuk0.UOeA4XY3dMrgh89IHKJrfNgGGzguGS7xPC"
+
+const input = (overrides: Partial<D1StudentCreateInput> = {}): D1StudentCreateInput => ({
   fullName: "New Student",
   email: `new-${Math.random().toString(36).slice(2)}@x.test`,
   dateOfBirth: "2004-05-01",
@@ -157,12 +159,12 @@ describe("createStudent (D1)", () => {
     expect(await t.db.studentFee.count({ where: { studentId: student.id } })).toBe(0)
   })
 
-  it("creates a STUDENT login when a password is given", async () => {
-    const student = await createStudent(db, input({ email: "login@x.test", password: "Password123!" }))
+  it("creates a STUDENT login with the given password hash", async () => {
+    const student = await createStudent(db, input({ email: "login@x.test", passwordHash: PASSWORD_HASH }))
     expect(student.hasLogin).toBe(true)
     const user = await t.db.user.findUnique({ where: { email: "login@x.test" } })
     expect(user).toMatchObject({ role: "STUDENT", studentId: student.id, name: "New Student" })
-    expect(user!.passwordHash).toMatch(/^\$2[aby]\$10\$/)
+    expect(user!.passwordHash).toBe(PASSWORD_HASH)
   })
 
   it("rejects a duplicate student email and leaves nothing behind", async () => {
@@ -173,14 +175,14 @@ describe("createStudent (D1)", () => {
 
   it("rejects an email that already has a login before writing anything", async () => {
     await t.db.user.create({ data: { email: "staff@x.test", name: "Staff", passwordHash: "x", role: "STAFF" } })
-    await expectDomainError(createStudent(db, input({ email: "staff@x.test", password: "Password123!" })), "CONFLICT", DUPLICATE_LOGIN)
+    await expectDomainError(createStudent(db, input({ email: "staff@x.test", passwordHash: PASSWORD_HASH })), "CONFLICT", DUPLICATE_LOGIN)
     expect(await t.db.student.count()).toBe(0)
   })
 
   it("rolls the student back when the login insert fails after the student exists (compensation)", async () => {
     // Another request creates a login with the same email between the pre-check and the insert.
     const sabotaged = withLoginRace(t.db)
-    await expectDomainError(createStudent(sabotaged, input({ email: "late@x.test", password: "Password123!" })), "CONFLICT", DUPLICATE_EMAIL)
+    await expectDomainError(createStudent(sabotaged, input({ email: "late@x.test", passwordHash: PASSWORD_HASH })), "CONFLICT", DUPLICATE_EMAIL)
     expect(await t.db.student.count()).toBe(0)
     expect(await t.db.studentFee.count()).toBe(0)
     expect(await t.db.user.count({ where: { email: "late@x.test", role: "STAFF" } })).toBe(1) // the other request's login stays
@@ -195,14 +197,14 @@ describe("createStudent (D1)", () => {
 
 describe("updateStudent (D1)", () => {
   it("updates the student and keeps the login's email and name in step", async () => {
-    const student = await createStudent(db, input({ email: "a@x.test", password: "Password123!" }))
+    const student = await createStudent(db, input({ email: "a@x.test", passwordHash: PASSWORD_HASH }))
     const updated = await updateStudent(db, student.id, { fullName: "Renamed", email: "renamed@x.test" })
     expect(updated).toMatchObject({ fullName: "Renamed", email: "renamed@x.test", studentId: student.studentId })
     expect(await t.db.user.findFirst({ where: { studentId: student.id } })).toMatchObject({ email: "renamed@x.test", name: "Renamed" })
   })
 
   it("restores the login when the student update fails (compensation)", async () => {
-    const a = await createStudent(db, input({ email: "a@x.test", fullName: "A", password: "Password123!" }))
+    const a = await createStudent(db, input({ email: "a@x.test", fullName: "A", passwordHash: PASSWORD_HASH }))
     await createStudent(db, input({ email: "b@x.test" })) // B has no login, so only Student.email clashes
     await expectDomainError(updateStudent(db, a.id, { email: "b@x.test", fullName: "A2" }), "CONFLICT", DUPLICATE_EMAIL)
     expect(await getStudent(db, a.id)).toMatchObject({ email: "a@x.test", fullName: "A" })
@@ -211,7 +213,7 @@ describe("updateStudent (D1)", () => {
 
   it("changes nothing when the login email clashes with another login", async () => {
     await t.db.user.create({ data: { email: "staff@x.test", name: "Staff", passwordHash: "x", role: "STAFF" } })
-    const a = await createStudent(db, input({ email: "a@x.test", password: "Password123!" }))
+    const a = await createStudent(db, input({ email: "a@x.test", passwordHash: PASSWORD_HASH }))
     await expectDomainError(updateStudent(db, a.id, { email: "staff@x.test" }), "CONFLICT", DUPLICATE_EMAIL)
     expect(await getStudent(db, a.id)).toMatchObject({ email: "a@x.test" })
   })

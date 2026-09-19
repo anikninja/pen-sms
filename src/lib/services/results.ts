@@ -1,31 +1,20 @@
-import { calculateClassification, type Classification } from "@/lib/domain/results"
 import { DomainError } from "@/lib/errors"
 import { prisma } from "@/lib/prisma"
+import { ASSESSMENT_NOT_FOUND } from "@/lib/services/shared/assessments"
+import {
+  NO_GRADE_YET,
+  toMarksheetEntry,
+  toResultDto,
+  WRONG_PROGRAMME,
+  type MarksheetEntry,
+  type ResultDto,
+  type StaffResultRow,
+} from "@/lib/services/shared/results"
+import { STUDENT_NOT_FOUND } from "@/lib/services/shared/students"
 
-export type ResultDto = {
-  studentId: string
-  assessmentId: string
-  grade: number
-  classification: Classification
-  published: boolean
-  updatedAt: Date
-}
-
-/** What a student may see: published results only, without the publish flag (§13, §24). */
-export type MarksheetEntry = {
-  assessmentId: string
-  title: string
-  module: string
-  grade: number
-  classification: Classification
-}
+export type { MarksheetEntry, ResultDto, StaffResultRow } from "@/lib/services/shared/results"
 
 const resultSelect = { studentId: true, assessmentId: true, grade: true, published: true, updatedAt: true } as const
-
-const toDto = (row: Omit<ResultDto, "classification">): ResultDto => ({
-  ...row,
-  classification: calculateClassification(row.grade),
-})
 
 /**
  * Enters or re-grades a result. A new result starts unpublished; re-grading keeps the current
@@ -36,10 +25,10 @@ export async function upsertResult(studentId: string, assessmentId: string, grad
     prisma.student.findUnique({ where: { id: studentId }, select: { programmeId: true } }),
     prisma.assessment.findUnique({ where: { id: assessmentId }, select: { programmeId: true } }),
   ])
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
-  if (!assessment) throw new DomainError("NOT_FOUND", "Assessment not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
+  if (!assessment) throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
   if (student.programmeId !== assessment.programmeId) {
-    throw new DomainError("CONFLICT", "This student is not in the assessment's programme.")
+    throw new DomainError("CONFLICT", WRONG_PROGRAMME)
   }
 
   const row = await prisma.result.upsert({
@@ -48,7 +37,7 @@ export async function upsertResult(studentId: string, assessmentId: string, grad
     update: { grade },
     select: resultSelect,
   })
-  return toDto(row)
+  return toResultDto(row)
 }
 
 export async function setResultPublished(
@@ -61,35 +50,35 @@ export async function setResultPublished(
     select: { id: true },
   })
   if (!existing) {
-    throw new DomainError("NOT_FOUND", "No grade has been entered for this student and assessment yet.")
+    throw new DomainError("NOT_FOUND", NO_GRADE_YET)
   }
   const row = await prisma.result.update({ where: { id: existing.id }, data: { published }, select: resultSelect })
-  return toDto(row)
+  return toResultDto(row)
 }
 
 /** Publishes or withholds a student's whole marksheet — the brief's "per student" (§13). */
 export async function setStudentResultsPublished(studentId: string, published: boolean) {
   const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true } })
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
   const { count } = await prisma.result.updateMany({ where: { studentId }, data: { published } })
   return { updated: count }
 }
 
 export async function setAssessmentResultsPublished(assessmentId: string, published: boolean) {
   const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId }, select: { id: true } })
-  if (!assessment) throw new DomainError("NOT_FOUND", "Assessment not found.")
+  if (!assessment) throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
   const { count } = await prisma.result.updateMany({ where: { assessmentId }, data: { published } })
   return { updated: count }
 }
 
 /** Staff view of one student's results, published or not. */
-export async function getStudentResults(studentId: string) {
+export async function getStudentResults(studentId: string): Promise<StaffResultRow[]> {
   const rows = await prisma.result.findMany({
     where: { studentId },
     orderBy: { assessment: { submissionDeadline: "asc" } },
     select: { ...resultSelect, assessment: { select: { title: true, module: true } } },
   })
-  return rows.map(({ assessment, ...row }) => ({ ...toDto(row), title: assessment.title, module: assessment.module }))
+  return rows.map(({ assessment, ...row }) => ({ ...toResultDto(row), title: assessment.title, module: assessment.module }))
 }
 
 /** Student marksheet. The published filter is in the query, so withheld results never leave the database. */
@@ -99,11 +88,5 @@ export async function getStudentPublishedResults(studentId: string): Promise<Mar
     orderBy: { assessment: { submissionDeadline: "asc" } },
     select: { assessmentId: true, grade: true, assessment: { select: { title: true, module: true } } },
   })
-  return rows.map(({ assessment, ...row }) => ({
-    assessmentId: row.assessmentId,
-    title: assessment.title,
-    module: assessment.module,
-    grade: row.grade,
-    classification: calculateClassification(row.grade),
-  }))
+  return rows.map(toMarksheetEntry)
 }

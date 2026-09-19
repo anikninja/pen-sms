@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      // Shared, framework-free code from the Next.js app: domain rules, money, validation, D1 services.
+      // esbuild (wrangler) reads the nearest tsconfig.json of each file, so this and the root
+      // tsconfig.json map "@/" to the same ../src directory.
+      "@/*": ["../src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,6 @@
+# Local secrets for `wrangler dev`. Copy to worker/.dev.vars (git-ignored) and fill in.
+# Never commit real values. In Cloudflare, set them with `wrangler secret put <NAME>`.
+
+# Shared with the Next.js server (same value as WORKER_INTERNAL_SECRET in the app's .env).
+# At least 32 random characters, e.g.: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+WORKER_INTERNAL_SECRET="replace-with-at-least-32-random-characters"

@@ -1,5 +1,5 @@
 /** Student DTO and messages shared by the PostgreSQL and D1 student services. */
-import type { EnrolmentStatus } from "@prisma/client"
+import type { EnrolmentStatus } from "@/lib/domain/enums"
 
 export type StudentDto = {
   id: string

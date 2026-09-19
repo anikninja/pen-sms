@@ -49,6 +49,24 @@ describe("uniqueViolation — every shape a unique violation arrives in", () => 
     expect(uniqueViolation(error)).toEqual({ fields: ["referenceNumber"], constraint: null })
   })
 
+  it("raw SQL through @prisma/adapter-d1: P2010 in the adapter's wording (captured from local D1)", () => {
+    const error = known(
+      "P2010",
+      { code: "N/A", message: "Unique constraint failed: (email)" },
+      "Invalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `N/A`. Message: `Unique constraint failed: (email)`"
+    )
+    expect(uniqueViolation(error)).toEqual({ fields: ["email"], constraint: null })
+    expect(isUniqueViolation(error, "email")).toBe(true)
+    expect(isUniqueViolation(error, "referenceNumber")).toBe(false)
+
+    const composite = known("P2010", { code: "N/A", message: "Unique constraint failed: (studentId, assessmentId)" })
+    expect(uniqueViolation(composite)?.fields).toEqual(["studentId", "assessmentId"])
+
+    const byIndex = known("P2010", { code: "N/A", message: "Unique constraint failed: Payment_referenceNumber_key" })
+    expect(uniqueViolation(byIndex)).toEqual({ fields: [], constraint: "Payment_referenceNumber_key" })
+    expect(isUniqueViolation(byIndex, "referenceNumber")).toBe(true)
+  })
+
   it("D1 directly: D1_ERROR message, composite key", () => {
     const error = new Error("D1_ERROR: UNIQUE constraint failed: Submission.studentId, Submission.assessmentId: SQLITE_CONSTRAINT")
     expect(uniqueViolation(error)?.fields).toEqual(["studentId", "assessmentId"])
@@ -65,6 +83,8 @@ describe("uniqueViolation — every shape a unique violation arrives in", () => 
     expect(
       uniqueViolation(known("P2010", { message: "CHECK constraint failed: Payment_amount_check" }, "Raw query failed. Message: `CHECK constraint failed: Payment_amount_check`"))
     ).toBeNull()
+    // The D1 adapter reports CHECK violations in its foreign-key wording (captured from local D1).
+    expect(uniqueViolation(known("P2010", { code: "N/A", message: "Foreign key constraint failed: FOREIGN KEY" }))).toBeNull()
     expect(uniqueViolation(new Error("boom"))).toBeNull()
     expect(uniqueViolation("UNIQUE constraint failed: x.y")).toBeNull()
     expect(uniqueViolation(null)).toBeNull()

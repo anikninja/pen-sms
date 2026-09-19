@@ -2,19 +2,11 @@ import { cache } from "react"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
-import { ROLE_HOME, type AppRole } from "@/lib/auth/roles"
+import { ROLE_HOME } from "@/lib/auth/roles"
+import type { Session, StaffSession, StudentSession } from "@/lib/auth/session-types"
 import { prisma } from "@/lib/prisma"
 
-export type Session = {
-  userId: string
-  name: string
-  email: string
-  role: AppRole
-  studentId: string | null
-}
-
-export type StaffSession = Session & { role: "STAFF"; studentId: null }
-export type StudentSession = Session & { role: "STUDENT"; studentId: string }
+export type { Session, StaffSession, StudentSession } from "@/lib/auth/session-types"
 
 /**
  * The single source of "who is making this request" for pages, actions and API routes.

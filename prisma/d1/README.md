@@ -1,11 +1,11 @@
 # Cloudflare D1 schema and services (migration target)
 
-**Status: preparation only.** The application still runs on PostgreSQL, and no D1 database has been created or migrated. This folder holds the D1 schema, its SQL migrations and its seed. `src/lib/services/d1/` holds D1 versions of the services whose PostgreSQL versions depend on PostgreSQL-only behaviour. Nothing in the app calls them yet.
+**Status: used by the Cloudflare Worker ([worker/](../../worker/README.md)); the Next.js app still runs on PostgreSQL.** No D1 database has been created in Cloudflare yet; the Worker runs against a local D1. This folder holds the D1 schema, its SQL migrations and its seed. `src/lib/services/d1/` holds the D1 versions of all services, which the Worker calls.
 
 | Purpose | Schema | Migrations | Services | Applied with |
 |---|---|---|---|---|
 | **Current application (PostgreSQL)** | `prisma/schema.prisma` (the default in `prisma.config.ts`) | `prisma/migrations/` | `src/lib/services/*.ts` | `npm run db:deploy` (`prisma migrate deploy`) |
-| **Cloudflare D1 (target)** | `prisma/d1/schema.prisma` | `prisma/d1/migrations/*.sql` | `src/lib/services/d1/*.ts` | Wrangler, in a later phase |
+| **Cloudflare D1 (target)** | `prisma/d1/schema.prisma` | `prisma/d1/migrations/*.sql` | `src/lib/services/d1/*.ts`, called by `worker/` | `wrangler d1 migrations apply` (local now; remote in Phase 8) |
 
 Both service sets share one implementation of the business rules, DTOs and messages: `src/lib/domain/*`, `src/lib/money.ts` and `src/lib/services/shared/*`.
 
@@ -58,14 +58,37 @@ What @prisma/adapter-d1 6.12 actually does, verified in its source:
 | Fee assignment | `FOR UPDATE`, then check, then upsert | One conditional `INSERT … SELECT … ON CONFLICT(studentId) DO UPDATE` ("fee ≥ paid" and the currency lock are checked in the statement) |
 | Search | `mode: "insensitive"` | `contains` (SQLite `LIKE`, case-insensitive for ASCII). Programme code is compared case-insensitively in code. |
 | Overdue list | `studentId IN (…all overdue ids…)` | Relation filter: no ID list, so no risk of hitting D1's 98-parameter limit |
+| Grade entry | Check, then upsert | One `INSERT … SELECT … ON CONFLICT`: the student and the assessment must share a programme, in the same statement |
+| Assessment programme move | Count, then update | One conditional `UPDATE … WHERE NOT EXISTS (submissions) AND NOT EXISTS (results)` |
+| Submission and grade lists | Nested relation selections with a `where` | Flat queries joined in code (see [Bound parameters](#bound-parameters-measured-on-local-d1)) |
 
 When a conditional write writes nothing, the service reads the current state and applies the shared rules to report the same error message as PostgreSQL.
 
 **Residual risk.** Compensation leaves a short window in which a student can exist without its fee or login. If the Worker is killed inside that window, a partial enrolment remains. Removing the window needs D1's native `batch()`, which Prisma does not use (a decision for the Worker phase).
 
-## DateTime encoding
+## Behaviour of @prisma/adapter-d1, measured on local D1
 
-Prisma's native SQLite engine (used by the tests and `seed-local.ts`) stores `DateTime` as **integer milliseconds**. `@prisma/adapter-d1` stores **ISO text**. The code therefore:
+These facts were measured with the real stack: wrangler's local D1, adapter 6.12.0, and Prisma's Workers and Node clients. `worker/test/` covers them.
+
+### Bound parameters (measured on local D1)
+
+- **Plain relation loads** (e.g. `student.findMany({ select: { fee: true } })`) are split into chunks by Prisma, and work with any number of rows.
+- **A nested relation selection with its own `where`** (e.g. `students { submissions: { where: { assessmentId } } }`) fails with `too many SQL variables` once there are more than about 98 parent rows. So does **a top-level `in: [...]` list** of 98 or more values.
+- The D1 services therefore never use either with an unbounded list. They run flat queries with a constant number of parameters and join them in code (`getAssessmentSubmissions`, `getStudentAssessments`), or use relation filters (`getOverdueStudents`). Tests cover 136 students and 114 assessments.
+
+### Errors
+
+| Case | What the adapter produces |
+|---|---|
+| Unique violation, model query | `P2002`, `meta.target: ["email"]` |
+| Unique violation, raw SQL | `P2010`, `meta.message: "Unique constraint failed: (email)"` (not SQLite's `UNIQUE constraint failed: Student.email`) |
+| CHECK violation, raw SQL | `P2010`, `meta.message: "Foreign key constraint failed: FOREIGN KEY"` |
+
+`uniqueViolation()` in `src/lib/errors.ts` recognises all of these. Before this was measured, raw-SQL duplicates (payment reference, student email) surfaced as 500 errors; now they are 409.
+
+### DateTime encoding
+
+`@prisma/adapter-d1` stores `DateTime` as **ISO-8601 text** (`2026-09-19T00:00:00.000Z`, measured). Prisma's native SQLite engine, used by `tests/d1/` and `seed-local.ts`, stores **integer milliseconds** instead. The code therefore:
 - never compares dates in raw SQL (date filters stay in Prisma queries);
 - passes `Date` values to raw SQL as parameters, so each engine encodes them its own way;
 - does not load data written by the native engine into real D1.
@@ -73,7 +96,7 @@ Prisma's native SQLite engine (used by the tests and `seed-local.ts`) stores `Da
 ## Seed
 
 - `prisma/d1/seed.ts` exports `seedD1(db)`. It loads the same demo data as `prisma/seed.ts`, with money in minor units, and is idempotent. It never reads `DATABASE_URL` and uses no transactions. It returns the submission PDFs, which are not written here; R2 is a later phase. Keep its data in step with `prisma/seed.ts`.
-- **Real D1:** run `seedD1` through the D1 adapter inside the Worker (later phase), because of the DateTime encoding.
+- **Real D1:** run `seedD1` through the D1 adapter, because of the DateTime encoding. Locally: `npm --prefix worker run db:seed:local`, which seeds wrangler's local D1 through the adapter.
 - **Local try-out:**
   ```sh
   D1_LOCAL_SQLITE_URL="file:/absolute/path/pen-sms-d1.sqlite" npx tsx prisma/d1/seed-local.ts
@@ -82,9 +105,8 @@ Prisma's native SQLite engine (used by the tests and `seed-local.ts`) stores `Da
 
 ## Tests
 
-`tests/d1/` runs the D1 services against a throwaway SQLite database built from `0001_baseline.sql` (`tests/d1/harness.ts`). It uses the D1 Prisma client over one connection, so statements run one at a time as on D1 while concurrent requests interleave between them. Negative controls (naive read-then-write versions) show that the harness does catch races.
-
-The harness does not exercise `@prisma/adapter-d1` itself or D1's 98-parameter limit. That needs Wrangler/Miniflare in the Worker phase.
+- **`tests/d1/`** runs the D1 services against a throwaway SQLite database built from `0001_baseline.sql` (`tests/d1/harness.ts`), through Prisma's native engine over one connection. It is fast, and its negative controls show that it catches races.
+- **`worker/test/`** runs the real Worker with a local D1 migrated by Wrangler and seeded through the adapter. It covers the adapter-specific behaviour above: error shapes, parameter limits and DateTime text.
 
 ## Migrations
 
@@ -113,9 +135,8 @@ npx prisma migrate diff --from-empty --to-schema-datamodel prisma/d1/schema.pris
 
 `npm install` generates both clients (`postinstall`). The D1 client is needed to type-check the project and run the D1 tests.
 
-## Runtime (later phase: Cloudflare Worker)
+## Runtime (Cloudflare Worker)
 
-- Install `@prisma/adapter-d1` at the **same version as `prisma`/`@prisma/client`** (6.12.x).
-- In the Worker, create the client per request from the binding: `new PrismaClient({ adapter: new PrismaD1(env.DB) })`. Pass it to the `src/lib/services/d1/*` functions. The `globalThis` singleton in `src/lib/prisma.ts` does not apply there.
-- The generated client maps the `workerd` export condition to its Workers build (`wasm.js` + `query_engine_bg.wasm`), so the Worker imports the package root.
-- The adapter reports CHECK-constraint failures as foreign-key violations (`P2003`). Unique violations are recognised in every shape by `uniqueViolation()` in `src/lib/errors.ts`.
+- **Adapter:** `@prisma/adapter-d1` 6.12.0 (the same version as `prisma` and `@prisma/client`) is a dependency of `worker/`, not of the Next.js app.
+- **Client:** the Worker creates the client per request from the binding, `new PrismaClient({ adapter: new PrismaD1(env.DB) })` (`worker/src/db.ts`), and passes it to `src/lib/services/d1/*`. The `globalThis` singleton in `src/lib/prisma.ts` is not used there.
+- **Build:** the generated client maps the `workerd` export condition to its Workers build (`wasm.js` + `query_engine_bg.wasm`), which wrangler bundles automatically. The bundle is about 1 MB gzipped.

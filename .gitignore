@@ -46,3 +46,10 @@ next-env.d.ts
 # uploaded submission files (architecture.md §32)
 /storage/uploads/*
 !/storage/uploads/.gitkeep
+
+# Cloudflare Worker (worker/): dependencies, build output, local D1/R2 state, local secrets
+/worker/node_modules
+/worker/dist
+/worker/.wrangler
+.dev.vars*
+!.dev.vars.example

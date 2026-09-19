@@ -1,15 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { DomainError, toDomainError, type ErrorCode } from "@/lib/errors"
-
-const STATUS: Record<ErrorCode, number> = {
-  VALIDATION: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  CONFLICT: 409,
-  INTERNAL: 500,
-}
+import { DomainError, ERROR_STATUS, toDomainError } from "@/lib/errors"
 
 export function apiError(error: unknown): NextResponse {
   const domainError = toDomainError(error)
@@ -18,7 +9,7 @@ export function apiError(error: unknown): NextResponse {
       error: domainError.message,
       ...(domainError.fieldErrors ? { fieldErrors: domainError.fieldErrors } : {}),
     },
-    { status: STATUS[domainError.code] }
+    { status: ERROR_STATUS[domainError.code] }
   )
 }
 

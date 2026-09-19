@@ -1,4 +1,4 @@
-import type { EnrolmentStatus } from "@prisma/client"
+import type { EnrolmentStatus } from "@/lib/domain/enums"
 
 import { Badge } from "@/components/ui/badge"
 import type { FeeStatus } from "@/lib/domain/fees"

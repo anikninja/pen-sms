@@ -8,15 +8,17 @@
  * - the fee is copied from the tariff in one INSERT … SELECT.
  * A login cannot be created in the same statement (another table); if that step fails the student
  * is deleted again (ON DELETE CASCADE removes the copied fee).
+ *
+ * Passwords arrive already hashed: bcrypt runs in the Next.js server, because one bcrypt hash costs
+ * about 100 ms of CPU and the Workers Free plan allows about 10 ms per request (worker/API.md).
  */
 import type { Prisma } from ".prisma/client-d1"
-import bcrypt from "bcryptjs"
 
 import { isoDateToUtc } from "@/lib/domain/dates"
 import { studentIdPrefix } from "@/lib/domain/student-id"
 import { DomainError, fieldConflict, isUniqueViolation } from "@/lib/errors"
 import type { D1Client } from "@/lib/services/d1/client"
-import { assertActiveProgramme, type ProgrammeDto } from "@/lib/services/shared/programmes"
+import { requireActiveProgramme } from "@/lib/services/d1/programmes"
 import {
   DUPLICATE_EMAIL,
   DUPLICATE_LOGIN,
@@ -27,6 +29,9 @@ import {
 } from "@/lib/services/shared/students"
 import { toIsoDate } from "@/lib/utils/format"
 import type { StudentCreateInput, StudentSearchInput, StudentUpdateInput } from "@/lib/validations/students"
+
+/** The create input with the password replaced by its bcrypt hash (hashed by the caller). */
+export type D1StudentCreateInput = Omit<StudentCreateInput, "password"> & { passwordHash?: string | null }
 
 const studentSelect = {
   id: true,
@@ -46,14 +51,6 @@ type StudentRow = Prisma.StudentGetPayload<{ select: typeof studentSelect }>
 
 function toDto({ user, dateOfBirth, ...student }: StudentRow): StudentDto {
   return { ...student, dateOfBirth: toIsoDate(dateOfBirth), hasLogin: user !== null }
-}
-
-export async function requireActiveProgramme(db: D1Client, programmeId: string): Promise<ProgrammeDto> {
-  const programme = await db.programme.findUnique({
-    where: { id: programmeId },
-    select: { id: true, code: true, name: true, active: true },
-  })
-  return assertActiveProgramme(programme)
 }
 
 /**
@@ -103,7 +100,7 @@ export async function getStudent(db: D1Client, id: string): Promise<StudentDto> 
  */
 async function insertStudentWithNextId(
   db: D1Client,
-  row: { id: string; input: StudentCreateInput; now: Date }
+  row: { id: string; input: D1StudentCreateInput; now: Date }
 ): Promise<void> {
   const { id, input, now } = row
   const prefix = studentIdPrefix(input.academicYear) // "SMS-2026-"
@@ -143,9 +140,9 @@ async function copyTariffToFee(db: D1Client, studentId: string, now: Date): Prom
  * statement; (2) the fee copy is one atomic statement; (3) the login is one INSERT. If (2) or (3)
  * fails, the student is deleted (cascading to the fee), so no half-created student remains.
  */
-export async function createStudent(db: D1Client, input: StudentCreateInput, now = new Date()): Promise<StudentDto> {
+export async function createStudent(db: D1Client, input: D1StudentCreateInput, now = new Date()): Promise<StudentDto> {
   await requireActiveProgramme(db, input.programmeId)
-  const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : null
+  const passwordHash = input.passwordHash ?? null
 
   // Checked before anything is written; a login created in between is caught by the unique index.
   if (passwordHash && (await db.user.findUnique({ where: { email: input.email }, select: { id: true } }))) {

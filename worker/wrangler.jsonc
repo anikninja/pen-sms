@@ -1,0 +1,33 @@
+// Cloudflare Worker for PEN SMS: the API and database boundary (see API.md).
+// Resource IDs below are placeholders until Phase 8 (Cloudflare deployment). Secrets are never
+// written here: locally they come from worker/.dev.vars (git-ignored), in Cloudflare from
+// `wrangler secret put`.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "inxapp-sms-api",
+  "main": "src/index.ts",
+  // Must not be later than the bundled workerd supports (wrangler 4.135 → workerd 2026-09-18).
+  "compatibility_date": "2026-09-01",
+  // Prisma's Workers build (wasm engine) expects Node.js compatibility APIs.
+  "compatibility_flags": ["nodejs_compat"],
+  // Smaller upload and faster cold starts; source maps keep stack traces readable in the logs.
+  "minify": true,
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "inxapp-sms",
+      // Placeholder: replaced by the real database id in Phase 8. Local development ignores it.
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      // The D1 SQL migrations (never the PostgreSQL ones in prisma/migrations).
+      "migrations_dir": "../prisma/d1/migrations"
+    }
+  ],
+
+  "vars": {
+    // Browser origins allowed to call the Worker directly (file uploads). Comma-separated.
+    "ALLOWED_ORIGINS": "http://localhost:3000"
+  }
+}

@@ -3,9 +3,8 @@
  * and the D1 services (src/lib/services/d1/fees.ts). Amounts come in as minor-unit bigints and
  * leave as decimal strings; nothing here touches a database client.
  */
-import type { EnrolmentStatus } from "@prisma/client"
-
 import { calendarDaysPast, endOfRegistryDay } from "@/lib/domain/dates"
+import type { EnrolmentStatus } from "@/lib/domain/enums"
 import {
   calculateOutstanding,
   feeStatus,

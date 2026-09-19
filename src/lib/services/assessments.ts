@@ -1,39 +1,20 @@
-import { Prisma, type EnrolmentStatus } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 
-import { calculateClassification, type Classification } from "@/lib/domain/results"
-import { submissionStatus, type SubmissionStatus } from "@/lib/domain/submissions"
 import { DomainError } from "@/lib/errors"
 import { prisma } from "@/lib/prisma"
 import { requireActiveProgramme } from "@/lib/services/programmes"
+import {
+  ASSESSMENT_NOT_FOUND,
+  deadlineWarnings,
+  PROGRAMME_LOCKED,
+  toAssessmentDto,
+  toAssessmentSubmissionRows,
+  type AssessmentDto,
+  type AssessmentSubmissionRow,
+} from "@/lib/services/shared/assessments"
 import type { AssessmentCreateInput, AssessmentUpdateInput } from "@/lib/validations/assessments"
 
-export type AssessmentDto = {
-  id: string
-  title: string
-  module: string
-  submissionDeadline: Date
-  isOpen: boolean
-  isPastDeadline: boolean
-  programme: { id: string; code: string; name: string }
-  submissionCount: number
-  gradedCount: number
-  createdAt: Date
-  updatedAt: Date
-}
-
-export type AssessmentSubmissionRow = {
-  student: { id: string; studentId: string; fullName: string; enrolmentStatus: EnrolmentStatus }
-  status: SubmissionStatus
-  submission: {
-    id: string
-    fileName: string
-    fileType: string
-    fileSize: number
-    submittedAt: Date
-    isLate: boolean
-  } | null
-  result: { grade: number; classification: Classification; published: boolean } | null
-}
+export type { AssessmentDto, AssessmentSubmissionRow } from "@/lib/services/shared/assessments"
 
 const assessmentSelect = {
   id: true,
@@ -47,17 +28,6 @@ const assessmentSelect = {
   _count: { select: { submissions: true, results: true } },
 } satisfies Prisma.AssessmentSelect
 
-type AssessmentRow = Prisma.AssessmentGetPayload<{ select: typeof assessmentSelect }>
-
-function toDto({ _count, ...row }: AssessmentRow, now: Date): AssessmentDto {
-  return {
-    ...row,
-    isPastDeadline: now.getTime() > row.submissionDeadline.getTime(),
-    submissionCount: _count.submissions,
-    gradedCount: _count.results,
-  }
-}
-
 export async function listAssessments(filter: { programmeId?: string } = {}): Promise<AssessmentDto[]> {
   const now = new Date()
   const rows = await prisma.assessment.findMany({
@@ -65,13 +35,13 @@ export async function listAssessments(filter: { programmeId?: string } = {}): Pr
     orderBy: [{ submissionDeadline: "asc" }, { title: "asc" }],
     select: assessmentSelect,
   })
-  return rows.map((row) => toDto(row, now))
+  return rows.map((row) => toAssessmentDto(row, now))
 }
 
 export async function getAssessment(id: string): Promise<AssessmentDto> {
   const row = await prisma.assessment.findUnique({ where: { id }, select: assessmentSelect })
-  if (!row) throw new DomainError("NOT_FOUND", "Assessment not found.")
-  return toDto(row, new Date())
+  if (!row) throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
+  return toAssessmentDto(row, new Date())
 }
 
 export async function createAssessment(
@@ -81,11 +51,7 @@ export async function createAssessment(
   const now = new Date()
 
   const row = await prisma.assessment.create({ data: input, select: assessmentSelect })
-  const warnings =
-    input.submissionDeadline.getTime() < now.getTime()
-      ? ["The deadline is already in the past, so every submission will be marked late."]
-      : []
-  return { assessment: toDto(row, now), warnings }
+  return { assessment: toAssessmentDto(row, now), warnings: deadlineWarnings(input.submissionDeadline, now) }
 }
 
 /** Edits an assessment or opens/closes it. Its programme is fixed once work has been submitted or graded. */
@@ -94,17 +60,17 @@ export async function updateAssessment(id: string, input: AssessmentUpdateInput)
     where: { id },
     select: { programmeId: true, _count: { select: { submissions: true, results: true } } },
   })
-  if (!current) throw new DomainError("NOT_FOUND", "Assessment not found.")
+  if (!current) throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
 
   if (input.programmeId && input.programmeId !== current.programmeId) {
     if (current._count.submissions > 0 || current._count.results > 0) {
-      throw new DomainError("CONFLICT", "The programme cannot change after submissions or results exist.")
+      throw new DomainError("CONFLICT", PROGRAMME_LOCKED)
     }
     await requireActiveProgramme(input.programmeId)
   }
 
   const row = await prisma.assessment.update({ where: { id }, data: input, select: assessmentSelect })
-  return toDto(row, new Date())
+  return toAssessmentDto(row, new Date())
 }
 
 /**
@@ -136,7 +102,7 @@ export async function getAssessmentSubmissions(assessmentId: string): Promise<As
     where: { id: assessmentId },
     select: { programmeId: true },
   })
-  if (!assessment) throw new DomainError("NOT_FOUND", "Assessment not found.")
+  if (!assessment) throw new DomainError("NOT_FOUND", ASSESSMENT_NOT_FOUND)
 
   const students = await prisma.student.findMany({
     where: {
@@ -161,14 +127,5 @@ export async function getAssessmentSubmissions(assessmentId: string): Promise<As
     },
   })
 
-  return students.map(({ submissions, results, ...student }) => {
-    const submission = submissions[0] ?? null
-    const result = results[0] ?? null
-    return {
-      student,
-      status: submissionStatus(submission),
-      submission,
-      result: result ? { ...result, classification: calculateClassification(result.grade) } : null,
-    }
-  })
+  return toAssessmentSubmissionRows(students)
 }
