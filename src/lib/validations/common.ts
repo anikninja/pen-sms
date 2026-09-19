@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { isIsoDate, registryToday } from "@/lib/domain/dates"
+import { formatMoney, isAmountInRange, isNonPositive, parseDecimalParts, parseMoney } from "@/lib/money"
 
 export const idSchema = z.uuid("Invalid id.")
 
@@ -48,34 +49,32 @@ export const dateTimeSchema = (label: string) =>
     )
     .transform((value) => new Date(value))
 
-const MAX_MONEY = 9_999_999_999.99 // Decimal(12, 2)
-
 /**
- * Money arrives as a string or number and leaves as a normalised string ("150000.00"),
- * ready for Prisma.Decimal. It is never used for float arithmetic.
+ * Money arrives as a string or number and leaves as a normalised string ("150000.00"): at most
+ * 2 decimal places, positive, and within Decimal(12, 2) (MAX_AMOUNT_MINOR). Checked on the digits
+ * with exact integer arithmetic (src/lib/money.ts); PostgreSQL services turn the string into a
+ * Decimal, D1 services into minor units with parseMoney().
  */
 export const moneySchema = (positiveMessage: string) =>
   z
     .union([z.string(), z.number()], { error: "Enter an amount." })
     .transform((value) => String(value).trim())
     .superRefine((value, ctx) => {
-      if (!/^-?\d+(\.\d+)?$/.test(value)) {
+      const parts = parseDecimalParts(value)
+      if (!parts) {
         ctx.addIssue({ code: "custom", message: "Enter a valid amount." })
         return
       }
-      if (Number(value) <= 0) {
+      if (isNonPositive(parts)) {
         ctx.addIssue({ code: "custom", message: positiveMessage })
         return
       }
-      if (!/^\d+(\.\d{1,2})?$/.test(value)) {
+      if (parts.fraction.length > 2) {
         ctx.addIssue({ code: "custom", message: "Amount can have at most 2 decimal places." })
         return
       }
-      if (Number(value) > MAX_MONEY) {
+      if (!isAmountInRange(parseMoney(value))) {
         ctx.addIssue({ code: "custom", message: "Amount is too large." })
       }
     })
-    .transform((value) => {
-      const [whole, fraction = ""] = value.split(".")
-      return `${BigInt(whole).toString()}.${fraction.padEnd(2, "0")}`
-    })
+    .transform((value) => formatMoney(parseMoney(value)))

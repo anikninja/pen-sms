@@ -1,61 +1,45 @@
-import { Prisma, type EnrolmentStatus } from "@prisma/client"
+/**
+ * Fees and payments on PostgreSQL (the running application).
+ *
+ * Concurrency relies on PostgreSQL: interactive transactions and a `SELECT … FOR UPDATE` row lock.
+ * The fee rules, DTOs and messages are shared with the D1 implementation (src/lib/services/d1/fees.ts)
+ * through src/lib/services/shared/fees.ts; money crosses from Decimal(12, 2) to minor units in
+ * src/lib/services/decimal.ts.
+ */
+import { Prisma } from "@prisma/client"
 
-import { calendarDaysPast, endOfRegistryDay, isoDateToUtc } from "@/lib/domain/dates"
-import {
-  calculateOutstanding,
-  feeStatus,
-  isOverdue,
-  isValidFeeAmount,
-  type FeeStatus,
-} from "@/lib/domain/fees"
-import { DomainError, fieldConflict, fieldError, isUniqueViolation } from "@/lib/errors"
+import { isoDateToUtc } from "@/lib/domain/dates"
+import { checkFeeAssignment, checkPayment } from "@/lib/domain/fees"
+import { DomainError, fieldConflict, isUniqueViolation } from "@/lib/errors"
+import { formatMoney, parseMoney } from "@/lib/money"
 import { prisma } from "@/lib/prisma"
-import { formatCurrency, toIsoDate } from "@/lib/utils/format"
+import { fromDecimal, sumFromDecimal } from "@/lib/services/decimal"
+import {
+  buildFeeOverviewRow,
+  buildFeeSummary,
+  DUPLICATE_PAYMENT_REFERENCE,
+  feeAssignmentRejected,
+  NO_TARIFF,
+  paymentRejected,
+  toOverdueStudents,
+  type FeeOverviewRow,
+  type FeeSummary,
+  type OverdueStudent,
+  type PaymentDto,
+  type TariffDto,
+} from "@/lib/services/shared/fees"
+import { STUDENT_NOT_FOUND } from "@/lib/services/shared/students"
+import { toIsoDate } from "@/lib/utils/format"
 import type { FeeAssignInput, PaymentCreateInput } from "@/lib/validations/fees"
 
-const ZERO = new Prisma.Decimal(0)
-
-/** Money is always a string in DTOs — Decimal cannot reach client components (§7). */
-export type FeeSummary = {
-  currency: string
-  totalFee: string
-  totalPaid: string
-  outstanding: string
-  dueDate: Date | null
-  isOverdue: boolean
-  daysOverdue: number
-  status: FeeStatus
-  hasFeeAssigned: boolean
-  /** false when the fee was set manually or no longer matches the current programme/year tariff */
-  matchesTariff: boolean
-  source: "TARIFF" | "MANUAL" | null
-}
-
-export type PaymentDto = {
-  id: string
-  amount: string
-  paymentDate: string // YYYY-MM-DD
-  referenceNumber: string
-  createdAt: Date
-}
-
-export type OverdueStudent = {
-  id: string
-  studentId: string
-  fullName: string
-  enrolmentStatus: EnrolmentStatus
-  programme: { code: string; name: string }
-  currency: string
-  outstanding: string
-  dueDate: Date
-  daysOverdue: number
-}
+export { totalOutstandingByCurrency } from "@/lib/services/shared/fees"
+export type { FeeOverviewRow, FeeSummary, OverdueStudent, PaymentDto, TariffDto } from "@/lib/services/shared/fees"
 
 type Db = Prisma.TransactionClient | typeof prisma
 
-async function totalPaid(db: Db, studentId: string): Promise<Prisma.Decimal> {
+async function totalPaid(db: Db, studentId: string): Promise<bigint> {
   const { _sum } = await db.payment.aggregate({ where: { studentId }, _sum: { amount: true } })
-  return _sum.amount ?? ZERO
+  return sumFromDecimal(_sum.amount)
 }
 
 /** Serialises payment recording and fee changes for one student (read-then-write safety, §7). */
@@ -63,7 +47,7 @@ async function lockStudent(tx: Prisma.TransactionClient, studentId: string) {
   const rows = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM "Student" WHERE id = ${studentId} FOR UPDATE
   `
-  if (rows.length === 0) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (rows.length === 0) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
 }
 
 export async function getStudentFeeSummary(studentId: string, now = new Date()): Promise<FeeSummary> {
@@ -71,7 +55,7 @@ export async function getStudentFeeSummary(studentId: string, now = new Date()):
     where: { id: studentId },
     select: { programmeId: true, academicYear: true, fee: true },
   })
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
 
   const [paid, tariff] = await Promise.all([
     totalPaid(prisma, studentId),
@@ -84,37 +68,12 @@ export async function getStudentFeeSummary(studentId: string, now = new Date()):
   ])
 
   const { fee } = student
-  if (!fee) {
-    return {
-      currency: tariff?.currency ?? "BDT",
-      totalFee: "0.00",
-      totalPaid: paid.toFixed(2),
-      outstanding: "0.00",
-      dueDate: null,
-      isOverdue: false,
-      daysOverdue: 0,
-      status: "NO_FEE",
-      hasFeeAssigned: false,
-      matchesTariff: false,
-      source: null,
-    }
-  }
-
-  const outstanding = calculateOutstanding(fee.amount, [paid])
-  const overdue = isOverdue(outstanding, endOfRegistryDay(fee.dueDate), now)
-  return {
-    currency: fee.currency,
-    totalFee: fee.amount.toFixed(2),
-    totalPaid: paid.toFixed(2),
-    outstanding: outstanding.toFixed(2),
-    dueDate: fee.dueDate,
-    isOverdue: overdue,
-    daysOverdue: overdue ? calendarDaysPast(fee.dueDate, now) : 0,
-    status: feeStatus(true, outstanding, endOfRegistryDay(fee.dueDate), now),
-    hasFeeAssigned: true,
-    matchesTariff: tariff !== null && fee.programmeFeeId === tariff.id,
-    source: fee.programmeFeeId ? "TARIFF" : "MANUAL",
-  }
+  return buildFeeSummary({
+    fee: fee ? { amount: fromDecimal(fee.amount), currency: fee.currency, dueDate: fee.dueDate, programmeFeeId: fee.programmeFeeId } : null,
+    totalPaid: paid,
+    tariff,
+    now,
+  })
 }
 
 export async function listPayments(studentId: string): Promise<PaymentDto[]> {
@@ -123,10 +82,8 @@ export async function listPayments(studentId: string): Promise<PaymentDto[]> {
     orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
     select: { id: true, amount: true, paymentDate: true, referenceNumber: true, createdAt: true },
   })
-  return rows.map((row) => ({ ...row, amount: row.amount.toFixed(2), paymentDate: toIsoDate(row.paymentDate) }))
+  return rows.map((row) => ({ ...row, amount: formatMoney(fromDecimal(row.amount)), paymentDate: toIsoDate(row.paymentDate) }))
 }
-
-export type TariffDto = { amount: string; currency: string; dueDate: Date }
 
 /** The tariff for the student's current programme and academic year, if one exists. */
 export async function getTariffForStudent(studentId: string): Promise<TariffDto | null> {
@@ -134,12 +91,12 @@ export async function getTariffForStudent(studentId: string): Promise<TariffDto 
     where: { id: studentId },
     select: { programmeId: true, academicYear: true },
   })
-  if (!student) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!student) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
   const tariff = await prisma.programmeFee.findUnique({
     where: { programmeId_academicYear: { programmeId: student.programmeId, academicYear: student.academicYear } },
     select: { amount: true, currency: true, dueDate: true },
   })
-  return tariff ? { ...tariff, amount: tariff.amount.toFixed(2) } : null
+  return tariff ? { ...tariff, amount: formatMoney(fromDecimal(tariff.amount)) } : null
 }
 
 export async function getStudentFees(studentId: string) {
@@ -151,25 +108,8 @@ export async function getStudentFees(studentId: string) {
   return { summary, payments, tariff }
 }
 
-export type FeeOverviewRow = {
-  student: {
-    id: string
-    studentId: string
-    fullName: string
-    enrolmentStatus: EnrolmentStatus
-    programme: { code: string; name: string }
-  }
-  status: FeeStatus
-  currency: string | null
-  totalFee: string
-  totalPaid: string
-  outstanding: string
-  dueDate: Date | null
-  daysOverdue: number
-}
-
 /** Every student's fee position in two queries — for the Fees list and dashboard totals (§19, §21). */
-export async function listFeeOverview(filter: { status?: FeeStatus } = {}, now = new Date()): Promise<FeeOverviewRow[]> {
+export async function listFeeOverview(filter: { status?: FeeOverviewRow["status"] } = {}, now = new Date()): Promise<FeeOverviewRow[]> {
   const [students, sums] = await Promise.all([
     prisma.student.findMany({
       orderBy: { studentId: "asc" },
@@ -184,47 +124,18 @@ export async function listFeeOverview(filter: { status?: FeeStatus } = {}, now =
     }),
     prisma.payment.groupBy({ by: ["studentId"], _sum: { amount: true } }),
   ])
-  const paidByStudent = new Map(sums.map((sum) => [sum.studentId, sum._sum.amount ?? ZERO]))
+  const paidByStudent = new Map(sums.map((sum) => [sum.studentId, sumFromDecimal(sum._sum.amount)]))
 
-  const rows = students.map(({ fee, ...student }): FeeOverviewRow => {
-    const paid = paidByStudent.get(student.id) ?? ZERO
-    if (!fee) {
-      return {
-        student,
-        status: "NO_FEE",
-        currency: null,
-        totalFee: "0.00",
-        totalPaid: paid.toFixed(2),
-        outstanding: "0.00",
-        dueDate: null,
-        daysOverdue: 0,
-      }
-    }
-    const outstanding = calculateOutstanding(fee.amount, [paid])
-    const status = feeStatus(true, outstanding, endOfRegistryDay(fee.dueDate), now)
-    return {
+  const rows = students.map(({ fee, ...student }) =>
+    buildFeeOverviewRow(
       student,
-      status,
-      currency: fee.currency,
-      totalFee: fee.amount.toFixed(2),
-      totalPaid: paid.toFixed(2),
-      outstanding: outstanding.toFixed(2),
-      dueDate: fee.dueDate,
-      daysOverdue: status === "OVERDUE" ? calendarDaysPast(fee.dueDate, now) : 0,
-    }
-  })
+      fee ? { amount: fromDecimal(fee.amount), currency: fee.currency, dueDate: fee.dueDate } : null,
+      paidByStudent.get(student.id) ?? 0n,
+      now
+    )
+  )
 
   return filter.status ? rows.filter((row) => row.status === filter.status) : rows
-}
-
-/** Sums outstanding balances per currency, exactly (Decimal), e.g. [{ currency: "BDT", amount: "435000.00" }]. */
-export function totalOutstandingByCurrency(rows: FeeOverviewRow[]): { currency: string; amount: string }[] {
-  const totals = new Map<string, Prisma.Decimal>()
-  for (const row of rows) {
-    if (!row.currency) continue
-    totals.set(row.currency, (totals.get(row.currency) ?? ZERO).plus(row.outstanding))
-  }
-  return [...totals].map(([currency, amount]) => ({ currency, amount: amount.toFixed(2) }))
 }
 
 /** Records a payment. The outstanding balance is recomputed inside the locked transaction (§7). */
@@ -234,17 +145,8 @@ export async function createPayment(studentId: string, input: PaymentCreateInput
       await lockStudent(tx, studentId)
 
       const fee = await tx.studentFee.findUnique({ where: { studentId } })
-      if (!fee) throw new DomainError("CONFLICT", "No fee has been assigned to this student.")
-
-      const outstanding = calculateOutstanding(fee.amount, [await totalPaid(tx, studentId)])
-      if (outstanding.lte(0)) throw new DomainError("CONFLICT", "This student has already paid in full.")
-
-      if (new Prisma.Decimal(input.amount).gt(outstanding)) {
-        throw fieldError(
-          "amount",
-          `Payment exceeds the outstanding balance of ${formatCurrency(outstanding, fee.currency)}.`
-        )
-      }
+      const check = checkPayment(fee ? fromDecimal(fee.amount) : null, await totalPaid(tx, studentId), parseMoney(input.amount))
+      if (!check.ok) throw paymentRejected(check, fee?.currency ?? "")
 
       return tx.payment.create({
         data: {
@@ -255,10 +157,10 @@ export async function createPayment(studentId: string, input: PaymentCreateInput
         },
       })
     })
-    return { ...row, amount: row.amount.toFixed(2), paymentDate: toIsoDate(row.paymentDate) }
+    return { ...row, amount: formatMoney(fromDecimal(row.amount)), paymentDate: toIsoDate(row.paymentDate) }
   } catch (error) {
     if (isUniqueViolation(error, "referenceNumber")) {
-      throw fieldConflict("referenceNumber", "This payment reference already exists.")
+      throw fieldConflict("referenceNumber", DUPLICATE_PAYMENT_REFERENCE)
     }
     throw error
   }
@@ -281,9 +183,7 @@ export async function assignStudentFee(studentId: string, input: FeeAssignInput)
           programmeId_academicYear: { programmeId: student.programmeId, academicYear: student.academicYear },
         },
       })
-      if (!tariff) {
-        throw new DomainError("CONFLICT", "No fee tariff exists for this student's programme and academic year.")
-      }
+      if (!tariff) throw new DomainError("CONFLICT", NO_TARIFF)
       data = { programmeFeeId: tariff.id, amount: tariff.amount, currency: tariff.currency, dueDate: tariff.dueDate }
     } else {
       data = {
@@ -295,13 +195,13 @@ export async function assignStudentFee(studentId: string, input: FeeAssignInput)
     }
 
     const paid = await totalPaid(tx, studentId)
-    if (paid.gt(0) && student.fee && student.fee.currency !== data.currency) {
-      throw new DomainError("CONFLICT", "The currency cannot change after payments have been recorded.")
-    }
-    if (!isValidFeeAmount(data.amount, paid)) {
-      const message = `Fee cannot be less than the amount already paid (${formatCurrency(paid, data.currency)}).`
-      throw input.source === "MANUAL" ? fieldError("amount", message) : new DomainError("CONFLICT", message)
-    }
+    const check = checkFeeAssignment({
+      amount: fromDecimal(data.amount),
+      currency: data.currency,
+      currentCurrency: student.fee?.currency ?? null,
+      totalPaid: paid,
+    })
+    if (!check.ok) throw feeAssignmentRejected(check, input.source, data.currency, paid)
 
     await tx.studentFee.upsert({ where: { studentId }, create: { studentId, ...data }, update: data })
   })
@@ -338,17 +238,11 @@ export async function getOverdueStudents(now = new Date()): Promise<OverdueStude
     where: { studentId: { in: fees.map((fee) => fee.student.id) } },
     _sum: { amount: true },
   })
-  const paidByStudent = new Map(sums.map((sum) => [sum.studentId, sum._sum.amount ?? ZERO]))
+  const paidByStudent = new Map(sums.map((sum) => [sum.studentId, sumFromDecimal(sum._sum.amount)]))
 
-  return fees
-    .map((fee) => ({ fee, outstanding: calculateOutstanding(fee.amount, [paidByStudent.get(fee.student.id) ?? ZERO]) }))
-    .filter(({ fee, outstanding }) => isOverdue(outstanding, endOfRegistryDay(fee.dueDate), now))
-    .map(({ fee, outstanding }) => ({
-      ...fee.student,
-      currency: fee.currency,
-      outstanding: outstanding.toFixed(2),
-      dueDate: fee.dueDate,
-      daysOverdue: calendarDaysPast(fee.dueDate, now),
-    }))
-    .sort((a, b) => b.daysOverdue - a.daysOverdue || a.studentId.localeCompare(b.studentId))
+  return toOverdueStudents(
+    fees.map((fee) => ({ ...fee, amount: fromDecimal(fee.amount) })),
+    paidByStudent,
+    now
+  )
 }

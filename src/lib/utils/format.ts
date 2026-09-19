@@ -1,13 +1,12 @@
 import { REGISTRY_TIME_ZONE } from "@/lib/domain/dates"
+import { formatMoneyGrouped, parseMoney } from "@/lib/money"
 
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-/** "150000.00", "BDT" → "150,000.00 BDT". Display only — never use for arithmetic. */
-export function formatCurrency(value: string | { toString(): string }, currency: string): string {
-  return `${moneyFormatter.format(Number(value.toString()))} ${currency}`
+/**
+ * "150000.00", "BDT" → "150,000.00 BDT". Takes the decimal string a DTO carries, never a minor-unit
+ * bigint (which would print 100× too large). Formatted exactly, without floating point.
+ */
+export function formatCurrency(value: string, currency: string): string {
+  return `${formatMoneyGrouped(parseMoney(value))} ${currency}`
 }
 
 /** Calendar date stored as UTC midnight → "2026-09-16". */

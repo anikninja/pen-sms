@@ -1,4 +1,9 @@
-import { Prisma, type EnrolmentStatus } from "@prisma/client"
+/**
+ * Students on PostgreSQL (the running application). Student IDs are serialised with an advisory
+ * lock and search uses PostgreSQL's case-insensitive mode; the D1 implementation of the same rules
+ * is src/lib/services/d1/students.ts.
+ */
+import { Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
 
 import { isoDateToUtc } from "@/lib/domain/dates"
@@ -6,6 +11,14 @@ import { formatStudentId } from "@/lib/domain/student-id"
 import { DomainError, fieldConflict, isUniqueViolation } from "@/lib/errors"
 import { prisma } from "@/lib/prisma"
 import { requireActiveProgramme } from "@/lib/services/programmes"
+import {
+  DUPLICATE_EMAIL,
+  DUPLICATE_LOGIN,
+  ID_GENERATION_FAILED,
+  MAX_ID_ATTEMPTS,
+  STUDENT_NOT_FOUND,
+  type StudentDto,
+} from "@/lib/services/shared/students"
 import { toIsoDate } from "@/lib/utils/format"
 import type {
   StudentCreateInput,
@@ -13,24 +26,10 @@ import type {
   StudentUpdateInput,
 } from "@/lib/validations/students"
 
-const MAX_ID_ATTEMPTS = 3
+export type { StudentDto } from "@/lib/services/shared/students"
+
 // First key of the advisory lock that serialises Student ID generation; the second key is the year.
 const STUDENT_ID_LOCK = 4_101
-const DUPLICATE_EMAIL = "A student with this email already exists."
-
-export type StudentDto = {
-  id: string
-  studentId: string
-  fullName: string
-  email: string
-  dateOfBirth: string // YYYY-MM-DD
-  academicYear: number
-  enrolmentStatus: EnrolmentStatus
-  programme: { id: string; code: string; name: string }
-  hasLogin: boolean
-  createdAt: Date
-  updatedAt: Date
-}
 
 const studentSelect = {
   id: true,
@@ -75,7 +74,7 @@ export async function listStudents(search: StudentSearchInput): Promise<StudentD
 
 export async function getStudent(id: string): Promise<StudentDto> {
   const row = await prisma.student.findUnique({ where: { id }, select: studentSelect })
-  if (!row) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!row) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
   return toDto(row)
 }
 
@@ -94,7 +93,7 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentD
           const studentId = await nextStudentId(tx, input.academicYear)
 
           if (passwordHash && (await tx.user.findUnique({ where: { email: input.email }, select: { id: true } }))) {
-            throw fieldConflict("email", "A login with this email already exists.")
+            throw fieldConflict("email", DUPLICATE_LOGIN)
           }
 
           const tariff = await tx.programmeFee.findUnique({
@@ -138,7 +137,7 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentD
       if (isUniqueViolation(error, "studentId") && attempt < MAX_ID_ATTEMPTS) continue
       if (isUniqueViolation(error, "email")) throw fieldConflict("email", DUPLICATE_EMAIL)
       if (isUniqueViolation(error, "studentId")) {
-        throw new DomainError("CONFLICT", "Could not generate a Student ID. Please try again.")
+        throw new DomainError("CONFLICT", ID_GENERATION_FAILED)
       }
       throw error
     }
@@ -172,7 +171,7 @@ export async function updateStudent(id: string, input: StudentUpdateInput): Prom
     where: { id },
     select: { programmeId: true, email: true, user: { select: { id: true } } },
   })
-  if (!current) throw new DomainError("NOT_FOUND", "Student not found.")
+  if (!current) throw new DomainError("NOT_FOUND", STUDENT_NOT_FOUND)
 
   if (input.programmeId && input.programmeId !== current.programmeId) {
     await requireActiveProgramme(input.programmeId)

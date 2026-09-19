@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { fieldError } from "@/lib/errors"
+import { assertActiveProgramme, type ProgrammeDto } from "@/lib/services/shared/programmes"
 
-export type ProgrammeDto = { id: string; code: string; name: string; active: boolean }
+export type { ProgrammeDto } from "@/lib/services/shared/programmes"
 
 export async function listProgrammes(options: { activeOnly?: boolean } = {}): Promise<ProgrammeDto[]> {
   return prisma.programme.findMany({
@@ -17,7 +17,5 @@ export async function requireActiveProgramme(programmeId: string): Promise<Progr
     where: { id: programmeId },
     select: { id: true, code: true, name: true, active: true },
   })
-  if (!programme) throw fieldError("programmeId", "Choose a valid programme.")
-  if (!programme.active) throw fieldError("programmeId", "This programme is not active.")
-  return programme
+  return assertActiveProgramme(programme)
 }

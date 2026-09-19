@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { Prisma } from "@prisma/client"
-
 import { ageOn, calendarDaysPast, endOfRegistryDay, isIsoDate, isoDateToUtc, registryToday } from "@/lib/domain/dates"
 import { isOverdue } from "@/lib/domain/fees"
+import { parseMoney } from "@/lib/money"
 
 describe("endOfRegistryDay (calendar due dates)", () => {
   const due = isoDateToUtc("2026-09-30")
   const deadline = endOfRegistryDay(due)
-  const owed = new Prisma.Decimal(100)
+  const owed = parseMoney("100")
 
   it("is 23:59:59.999 in Dhaka on the due date", () => {
     expect(deadline.toISOString()).toBe("2026-09-30T17:59:59.999Z")

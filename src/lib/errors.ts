@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client"
 import { z } from "zod"
 
 export type ErrorCode =
@@ -35,13 +34,77 @@ export const fieldError = (field: string, message: string) =>
 export const fieldConflict = (field: string, message: string) =>
   new DomainError("CONFLICT", message, { [field]: [message] })
 
-export function isUniqueViolation(error: unknown, field?: string): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
-    return false
+/**
+ * A Prisma known request error, recognised by shape rather than `instanceof`: the class is a
+ * different object in each generated client and in the Node and Workers (wasm) runtimes.
+ */
+export type PrismaKnownError = Error & { code: string; meta?: Record<string, unknown> }
+
+export function isPrismaKnownError(error: unknown): error is PrismaKnownError {
+  return (
+    error instanceof Error &&
+    error.name === "PrismaClientKnownRequestError" &&
+    typeof (error as { code?: unknown }).code === "string"
+  )
+}
+
+export type UniqueViolation = {
+  /** Column names, e.g. ["email"] or ["studentId", "assessmentId"]. Empty when not reported. */
+  fields: string[]
+  /** Constraint or index name when that is all the database reported, e.g. "Student_email_key". */
+  constraint: string | null
+}
+
+// SQLite / D1: "UNIQUE constraint failed: Payment.referenceNumber" (also inside P2010 raw-query errors).
+const SQLITE_UNIQUE = /(?:UNIQUE|PRIMARY KEY) constraint failed: ([^`\n]+)/
+// Prisma's rendering of a driver-adapter violation: "Unique constraint failed on the fields: (`email`)".
+const PRISMA_UNIQUE_FIELDS = /Unique constraint failed on the fields: \(([^)]*)\)/
+
+// "Payment.referenceNumber" or "Submission.studentId, Submission.assessmentId: SQLITE_CONSTRAINT" (D1 suffix).
+const columnsFromSqlite = (list: string) =>
+  list
+    .split(": ")[0]
+    .split(",")
+    .map((part) => part.trim().split(".").pop() ?? "")
+    .filter(Boolean)
+
+/**
+ * Describes a unique-constraint violation, or returns null for any other error. Handles every shape:
+ * - PostgreSQL and Prisma's native SQLite engine: P2002 with `meta.target` (field list or constraint name)
+ * - driver adapters such as @prisma/adapter-d1: P2002 with `meta.driverAdapterError.cause.constraint`
+ * - raw SQL through Prisma (P2010) or D1 itself: only the SQLite message names the columns
+ */
+export function uniqueViolation(error: unknown): UniqueViolation | null {
+  if (isPrismaKnownError(error) && error.code === "P2002") {
+    const target = error.meta?.target
+    if (Array.isArray(target)) return { fields: target.map(String), constraint: null }
+    if (typeof target === "string") return { fields: [], constraint: target }
+
+    const constraint = (error.meta?.driverAdapterError as { cause?: { constraint?: unknown } } | undefined)?.cause?.constraint as
+      | { fields?: unknown; index?: unknown }
+      | undefined
+    if (Array.isArray(constraint?.fields)) return { fields: constraint.fields.map(String), constraint: null }
+    if (typeof constraint?.index === "string") return { fields: [], constraint: constraint.index }
+
+    const listed = PRISMA_UNIQUE_FIELDS.exec(error.message)
+    if (listed) return { fields: listed[1].split(",").map((field) => field.trim().replace(/`/g, "")), constraint: null }
+    const sqlite = SQLITE_UNIQUE.exec(error.message)
+    return { fields: sqlite ? columnsFromSqlite(sqlite[1]) : [], constraint: null }
   }
+
+  if (error instanceof Error) {
+    const rawMessage = isPrismaKnownError(error) ? String(error.meta?.message ?? error.message) : error.message
+    const sqlite = SQLITE_UNIQUE.exec(rawMessage) ?? SQLITE_UNIQUE.exec(error.message)
+    if (sqlite) return { fields: columnsFromSqlite(sqlite[1]), constraint: null }
+  }
+  return null
+}
+
+export function isUniqueViolation(error: unknown, field?: string): boolean {
+  const violation = uniqueViolation(error)
+  if (!violation) return false
   if (!field) return true
-  const target = error.meta?.target
-  return Array.isArray(target) ? target.includes(field) : String(target ?? "").includes(field)
+  return violation.fields.includes(field) || (violation.constraint?.includes(field) ?? false)
 }
 
 /** Parses untrusted input or throws a VALIDATION error with per-field messages. */
@@ -66,9 +129,9 @@ function failValidation(message: string, fieldErrors: FieldErrors): never {
 export function toDomainError(error: unknown): DomainError {
   if (error instanceof DomainError) return error
 
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P2002") return new DomainError("CONFLICT", "This record already exists.")
-    if (error.code === "P2025") return new DomainError("NOT_FOUND", "The record was not found.")
+  if (uniqueViolation(error)) return new DomainError("CONFLICT", "This record already exists.")
+  if (isPrismaKnownError(error) && error.code === "P2025") {
+    return new DomainError("NOT_FOUND", "The record was not found.")
   }
 
   console.error(error)
