@@ -1,4 +1,4 @@
-# PEN SMS — Registry Module
+# INX SMS — Registry Module
 
 A Student Management System for a university **Registry team**, built with Next.js 16, PostgreSQL and Prisma for the PEN Global technical assessment. Registry staff manage students, fees, assessments and results. Students sign in to see their own fees, submit coursework and read their published results.
 
@@ -184,6 +184,6 @@ I made the product and security decisions, and every change was reviewed, run an
 
 ## Project ownership and credit
 
-**PEN SMS — Registry Module** was designed and built by **Anik Ninja** ([@anikninja](https://github.com/anikninja)) as a technical assessment for PEN Global.
+**INX SMS — Registry Module** was designed and built by **Anik Ninja** ([@anikninja](https://github.com/anikninja)) as a technical assessment for PEN Global.
 
 © 2026 Anik Ninja. All rights reserved. The assessment brief is not included in this repository.

@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PEN SMS",
+  title: "INX SMS",
   description: "A simple Student Management System built with Next.js, Prisma, and PostgreSQL.",
 };
 

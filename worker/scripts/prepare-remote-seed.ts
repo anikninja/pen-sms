@@ -96,7 +96,7 @@ async function main() {
       const { counts, files } = await seedD1(db, new Date(), { password })
 
       const lines = [
-        `-- PEN SMS demo data for an EMPTY production D1 database (generated ${new Date().toISOString()}).`,
+        `-- INX SMS demo data for an EMPTY production D1 database (generated ${new Date().toISOString()}).`,
         "-- Plain INSERTs: applying this to a database that already has data fails instead of overwriting it.",
         "-- Dates are relative to the generation day (e.g. one programme fee is already overdue).",
       ]

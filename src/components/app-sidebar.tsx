@@ -59,7 +59,7 @@ export function AppSidebar({
               render={<Link href={ROLE_HOME[role]} />}
             >
               <GraduationCapIcon className="size-5!" />
-              <span className="text-base font-semibold">PEN SMS</span>
+              <span className="text-base font-semibold">INX SMS</span>
               <span className="ml-auto text-xs text-muted-foreground">
                 {role === "STAFF" ? "Registry" : "Student"}
               </span>

@@ -1,4 +1,4 @@
-# PEN SMS Worker API (v1)
+# INX SMS Worker API (v1)
 
 The Cloudflare Worker in this folder is the application's **database and file boundary**. The Next.js server (Vercel) calls it over HTTPS; the Worker runs the business rules against Cloudflare D1 through Prisma 6.12 and `@prisma/adapter-d1`, and keeps submission files in a private R2 bucket. Browsers never call these endpoints, except the two short-lived file-transfer URLs ([Files](#files)).
 

@@ -1,4 +1,4 @@
-# PEN SMS — Full Documentation
+# INX SMS — Full Documentation
 
 > The short guide for running and using the app is the [README](../README.md). This document has the full detail: architecture, API, rules, decisions, edge cases, testing and AI usage.
 

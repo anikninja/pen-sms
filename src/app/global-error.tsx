@@ -9,7 +9,7 @@ export default function GlobalError({ error, retry }: RouteErrorProps) {
   return (
     <html lang="en">
       <body className="flex min-h-svh items-center justify-center p-4 font-sans antialiased">
-        <title>Something went wrong · PEN SMS</title>
+        <title>Something went wrong · INX SMS</title>
         <div className="max-w-md space-y-3 text-center">
           <h1 className="text-lg font-semibold">Something went wrong</h1>
           <p className="text-sm text-muted-foreground">The application could not be loaded. Please try again in a moment.</p>

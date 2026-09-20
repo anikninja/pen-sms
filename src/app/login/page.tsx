@@ -6,7 +6,7 @@ import { LoginForm } from "@/components/login-form"
 import { ROLE_HOME } from "@/lib/auth/roles"
 import { getSession } from "@/lib/auth/session"
 
-export const metadata: Metadata = { title: "Sign in · PEN SMS" }
+export const metadata: Metadata = { title: "Sign in · INX SMS" }
 
 // Matches prisma/seed.ts. Shown only when DEMO_MODE="true".
 const DEMO_ACCOUNTS = [
@@ -26,7 +26,7 @@ export default async function LoginPage() {
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex items-center gap-2 font-medium">
           <GraduationCapIcon className="size-5" />
-          PEN SMS · Registry
+          INX SMS · Registry
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="flex w-full max-w-xs flex-col gap-6">

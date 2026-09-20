@@ -2,7 +2,7 @@
   "name": "pen-sms-worker",
   "version": "0.1.0",
   "private": true,
-  "description": "Cloudflare Worker: the API and database boundary for PEN SMS (D1 via Prisma, R2 files). See API.md.",
+  "description": "Cloudflare Worker: the API and database boundary for INX SMS (D1 via Prisma, R2 files). See API.md.",
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --outdir dist",

@@ -1,4 +1,4 @@
-// Cloudflare Worker for PEN SMS: the API and database boundary (see API.md).
+// Cloudflare Worker for INX SMS: the API and database boundary (see API.md).
 // The top level is for local development (`wrangler dev`, tests); production is `env.production`
 // (docs/deployment.md). Secrets are never written here: locally they come from worker/.dev.vars
 // (git-ignored), in Cloudflare from Wrangler secrets.

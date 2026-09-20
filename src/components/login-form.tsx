@@ -17,7 +17,7 @@ export function LoginForm({ className }: { className?: string }) {
     <form action={formAction} className={cn("flex flex-col gap-6", className)} noValidate>
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Sign in to PEN SMS</h1>
+          <h1 className="text-2xl font-bold">Sign in to INX SMS</h1>
           <p className="text-sm text-balance text-muted-foreground">
             Registry staff and students use the same sign-in.
           </p>

@@ -1,4 +1,4 @@
-# PEN SMS API Worker
+# INX SMS API Worker
 
 The Cloudflare Worker that stands between the Next.js app and Cloudflare D1 (Prisma 6.12 with `@prisma/adapter-d1`) and the private R2 bucket of submission files.
 
