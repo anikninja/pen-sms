@@ -105,7 +105,7 @@ Prisma's native SQLite engine, used by `tests/d1/` and `seed-local.ts`, stores *
 - **Real D1:** run `seedD1` through the D1 adapter, because of the DateTime encoding. Locally: `npm --prefix worker run db:seed:local`, which seeds wrangler's local D1 through the adapter.
 - **Local try-out:**
   ```sh
-  D1_LOCAL_SQLITE_URL="file:/absolute/path/pen-sms-d1.sqlite" npx tsx prisma/d1/seed-local.ts
+  D1_LOCAL_SQLITE_URL="file:/absolute/path/inx-sms-d1.sqlite" npx tsx prisma/d1/seed-local.ts
   ```
   A new file is created from the baseline first. The script refuses non-`file:` URLs and Wrangler state.
 

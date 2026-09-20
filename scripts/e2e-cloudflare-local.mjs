@@ -19,7 +19,7 @@ import os from "node:os"
 import path from "node:path"
 
 const ROOT = process.cwd()
-if (JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).name !== "pen-sms") {
+if (JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).name !== "inx-sms") {
   console.error("Run this from the repository root.")
   process.exit(1)
 }
@@ -36,7 +36,7 @@ if (!fs.existsSync(WRANGLER)) {
   process.exit(1)
 }
 
-const state = fs.mkdtempSync(path.join(os.tmpdir(), "pen-sms-e2e-"))
+const state = fs.mkdtempSync(path.join(os.tmpdir(), "inx-sms-e2e-"))
 const logs = path.join(state, "logs")
 fs.mkdirSync(logs)
 const secret = crypto.randomBytes(32).toString("base64url")
@@ -123,7 +123,7 @@ try {
     keep(csrf)
     const { csrfToken } = await csrf.json()
     const cookie = () => [...jar].map(([k, v]) => `${k}=${v}`).join("; ")
-    keep(await fetch(`${APP_URL}/api/auth/callback/credentials`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookie() }, body: new URLSearchParams({ csrfToken, email: "registry@pensms.test", password: "Password123!" }) }))
+    keep(await fetch(`${APP_URL}/api/auth/callback/credentials`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookie() }, body: new URLSearchParams({ csrfToken, email: "registry@sms.inxapp.net", password: "Password123!" }) }))
     return cookie()
   })()
   stop(worker)

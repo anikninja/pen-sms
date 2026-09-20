@@ -1,7 +1,13 @@
 {
-  "name": "pen-sms",
+  "name": "inx-sms",
   "version": "0.1.0",
   "private": true,
+  "description": "INX SMS — a Student Management System for university Registry teams. An INXAPP Limited product.",
+  "author": "INXAPP Limited (https://www.inxapp.net)",
+  "contributors": [
+    "Anik Ninja (https://github.com/anikninja)"
+  ],
+  "homepage": "https://sms.inxapp.net",
   "scripts": {
     "dev": "next dev",
     "postinstall": "prisma generate && prisma generate --schema prisma/d1/schema.prisma",

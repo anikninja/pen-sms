@@ -1,8 +1,10 @@
 # INX SMS — Full Documentation
 
+**An [INXAPP Limited](https://www.inxapp.net) product.**
+
 > The short guide for running and using the app is the [README](../README.md). This document has the full detail: architecture, API, rules, decisions, edge cases, testing and AI usage.
 
-A focused Student Management System for a university **Registry team**, built for the PEN Global technical assessment. It covers four daily Registry workflows end to end, on real PostgreSQL data:
+A focused Student Management System for a university **Registry team**, the MVP product of INXAPP Limited. It began as the PEN Global technical assessment. It covers four daily Registry workflows end to end, on real PostgreSQL data:
 
 1. **Student enrolment** — create students with an auto-generated Student ID, search and filter.
 2. **Fees and payments** — a fee assigned per student, payments, live outstanding balance, overdue flags.
@@ -241,7 +243,7 @@ BASE=http://localhost:3000
 CSRF=$(curl -s -c cookies.txt "$BASE/api/auth/csrf" | sed -E 's/.*"csrfToken":"([^"]+)".*/\1/')
 curl -s -b cookies.txt -c cookies.txt -o /dev/null "$BASE/api/auth/callback/credentials" \
   --data-urlencode "csrfToken=$CSRF" \
-  --data-urlencode 'email=registry@pensms.test' \
+  --data-urlencode 'email=registry@sms.inxapp.net' \
   --data-urlencode 'password=Password123!'
 
 # Search students
@@ -262,7 +264,7 @@ curl -s -b cookies.txt -X PATCH "$BASE/api/students/<id>/results/<assessmentId>"
   -H 'content-type: application/json' -d '{"published":true}'
 ```
 
-As a student (sign in with `rahim.uddin@student.pensms.test` into a separate jar, e.g. `student.txt`):
+As a student (sign in with `rahim.uddin@sms.inxapp.net` into a separate jar, e.g. `student.txt`):
 
 ```bash
 curl -s -b student.txt "$BASE/api/assessments"            # own programme, with canUpload / uploadBlockedReason
@@ -404,13 +406,13 @@ Every seeded account uses the password **`Password123!`**.
 
 | Role | Email |
 |---|---|
-| Staff (Registry) | `registry@pensms.test` |
-| Student (overdue, late submission) | `rahim.uddin@student.pensms.test` |
-| Student (fully paid, withheld result) | `nusrat.jahan@student.pensms.test` |
-| Student (overdue, no payments) | `abir.hossain@student.pensms.test` |
-| Student (deferred) | `tanvir.ahmed@student.pensms.test` |
-| Student (MBA, not yet due) | `farhana.akter@student.pensms.test` |
-| Student (completed) | `sadia.islam@student.pensms.test` |
+| Staff (Registry) | `registry@sms.inxapp.net` |
+| Student (overdue, late submission) | `rahim.uddin@sms.inxapp.net` |
+| Student (fully paid, withheld result) | `nusrat.jahan@sms.inxapp.net` |
+| Student (overdue, no payments) | `abir.hossain@sms.inxapp.net` |
+| Student (deferred) | `tanvir.ahmed@sms.inxapp.net` |
+| Student (MBA, not yet due) | `farhana.akter@sms.inxapp.net` |
+| Student (completed) | `sadia.islam@sms.inxapp.net` |
 
 - One sign-in page for both roles; each role lands on its own dashboard. Staff cannot open student pages and students cannot open staff pages or APIs.
 - With `DEMO_MODE="true"` the login page lists demo accounts and the password.

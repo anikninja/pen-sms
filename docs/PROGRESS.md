@@ -84,9 +84,9 @@ Password for all: `Password123!`
 
 | Role | Email |
 |---|---|
-| Staff | `registry@pensms.test` |
-| Student (SMS-YYYY-0002, default demo) | `rahim.uddin@student.pensms.test` |
-| Other students | `nusrat.jahan`, `abir.hossain`, `tanvir.ahmed`, `farhana.akter`, `sadia.islam` — each `@student.pensms.test` |
+| Staff | `registry@sms.inxapp.net` |
+| Student (SMS-YYYY-0002, default demo) | `rahim.uddin@sms.inxapp.net` |
+| Other students | `nusrat.jahan`, `abir.hossain`, `tanvir.ahmed`, `farhana.akter`, `sadia.islam` — each `@sms.inxapp.net` |
 
 ---
 

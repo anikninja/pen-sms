@@ -1,5 +1,5 @@
 {
-  "name": "pen-sms-worker",
+  "name": "inx-sms-worker",
   "version": "0.1.0",
   "private": true,
   "description": "Cloudflare Worker: the API and database boundary for INX SMS (D1 via Prisma, R2 files). See API.md.",

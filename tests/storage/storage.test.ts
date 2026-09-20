@@ -10,7 +10,7 @@ let root: string
 let storage: LocalFileStorage
 
 beforeAll(async () => {
-  root = await mkdtemp(path.join(os.tmpdir(), "pen-sms-storage-"))
+  root = await mkdtemp(path.join(os.tmpdir(), "inx-sms-storage-"))
   storage = new LocalFileStorage(root)
 })
 afterAll(async () => {

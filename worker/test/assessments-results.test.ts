@@ -14,9 +14,9 @@ let programmeIdOf: (seq: number) => string
 beforeAll(async () => {
   w = await startTestWorker({ seed: true })
   staff = w.users.get(STAFF_EMAIL)!.id
-  nusrat = w.users.get("nusrat.jahan@student.pensms.test")!.id
-  rahim = w.users.get("rahim.uddin@student.pensms.test")!.id
-  farhana = w.users.get("farhana.akter@student.pensms.test")!.id
+  nusrat = w.users.get("nusrat.jahan@sms.inxapp.net")!.id
+  rahim = w.users.get("rahim.uddin@sms.inxapp.net")!.id
+  farhana = w.users.get("farhana.akter@sms.inxapp.net")!.id
   const { data } = await w.call("GET", "/v1/students", { as: staff })
   const bySid = Object.fromEntries(data.students.map((s: { studentId: string }) => [s.studentId, s]))
   idOf = (seq) => bySid[sid(seq)].id

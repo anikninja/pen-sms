@@ -79,7 +79,7 @@ describe("many rows through the adapter (bound-parameter limit)", () => {
   })
 
   it("lists a student's 112 programme assessments with their own submissions", async () => {
-    const farhana = w.users.get("farhana.akter@student.pensms.test")!.id
+    const farhana = w.users.get("farhana.akter@sms.inxapp.net")!.id
     const { status, data } = await w.call("GET", "/v1/me/assessments", { as: farhana })
     expect(status).toBe(200)
     expect(data.assessments).toHaveLength(ASSESSMENTS + 2)

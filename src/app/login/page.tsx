@@ -2,16 +2,18 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { GraduationCapIcon } from "lucide-react"
 
+import { InxappCredit, InxappCreditCompact } from "@/components/inxapp-credit"
 import { LoginForm } from "@/components/login-form"
 import { ROLE_HOME } from "@/lib/auth/roles"
+import { PRODUCT } from "@/lib/brand"
 import { getSession } from "@/lib/auth/session"
 
-export const metadata: Metadata = { title: "Sign in · INX SMS" }
+export const metadata: Metadata = { title: `Sign in · ${PRODUCT.name}` }
 
 // Matches prisma/seed.ts. Shown only when DEMO_MODE="true".
 const DEMO_ACCOUNTS = [
-  { role: "Staff (Registry)", email: "registry@pensms.test" },
-  { role: "Student", email: "rahim.uddin@student.pensms.test" },
+  { role: "Staff (Registry)", email: "registry@sms.inxapp.net" },
+  { role: "Student", email: "rahim.uddin@sms.inxapp.net" },
 ]
 const DEMO_PASSWORD = "Password123!"
 
@@ -26,7 +28,7 @@ export default async function LoginPage() {
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex items-center gap-2 font-medium">
           <GraduationCapIcon className="size-5" />
-          INX SMS · Registry
+          {PRODUCT.name} · {PRODUCT.module}
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="flex w-full max-w-xs flex-col gap-6">
@@ -52,8 +54,10 @@ export default async function LoginPage() {
             )}
           </div>
         </div>
+        {/* The company credit lives in the right-hand panel, which small screens do not show. */}
+        <InxappCreditCompact className="self-center px-0 lg:hidden" />
       </div>
-      <div className="relative hidden flex-col justify-end bg-muted p-10 lg:flex">
+      <div className="relative hidden flex-col justify-end gap-8 bg-muted p-10 lg:flex">
         <blockquote className="max-w-md space-y-2">
           <p className="text-lg font-medium">Student Registry</p>
           <p className="text-sm text-muted-foreground">
@@ -61,6 +65,7 @@ export default async function LoginPage() {
             and the students they support.
           </p>
         </blockquote>
+        <InxappCredit className="border-t pt-6" />
       </div>
     </div>
   )

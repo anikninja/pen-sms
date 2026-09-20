@@ -24,11 +24,11 @@ All `wrangler` commands run from `worker/` (`cd worker`) after `npm ci --prefix 
 | Step | Result |
 |---|---|
 | 8.0 Account and zone | Account `b7fd79fc…87b2` owns the active zone `inxapp.net` |
-| 8.1 D1 `inxapp-sms` (APAC) | `database_id` `c42f77c8-7337-4cab-956f-aa2689d844f7`. `0001_baseline.sql` applied: 9 tables, 28 indexes, 6 CHECK constraints, 11 foreign keys (enforced) |
+| 8.1 D1 `inxapp-sms` (APAC) | `database_id` `c42f77c8-7337-4cab-956f-aa2689d844f7`. `0001_baseline.sql` applied: 9 tables, 28 indexes, 6 CHECK constraints, 11 foreign keys (enforced). `0002_rebrand_demo_emails.sql` follows in Phase 10 |
 | 8.2 R2 `inxapp-sms-files` (APAC) | Private: r2.dev access disabled, no custom domain, no CORS configuration |
-| 8.3 Secrets | Internal secret and demo password in `~/.pen-sms-deploy/`; the Worker holds the secret as `secret_text` |
+| 8.3 Secrets | Internal secret and demo password in `~/.inxapp-sms-deploy/`; the Worker holds the secret as `secret_text` |
 | 8.4 Worker `inxapp-sms-api` | Version `8c727fd1-4dcc-435e-9c94-6d172165a73f`. Only at `https://sms-api.inxapp.net` (one proxied DNS record, valid certificate); `workers.dev` and preview URLs disabled; plain HTTP → 403 |
-| 8.5 Demo data | 46 rows (bookmark right after the import: `00000009-0000000d-000050eb-9393fd4458f599199ceb9caf13eecd93`) and 6 PDFs, byte-identical in R2. Demo password from `~/.pen-sms-deploy/demo-password.txt` |
+| 8.5 Demo data | 46 rows (bookmark right after the import: `00000009-0000000d-000050eb-9393fd4458f599199ceb9caf13eecd93`) and 6 PDFs, byte-identical in R2. Demo password from `~/.inxapp-sms-deploy/demo-password.txt` |
 | 8.6 Smoke test | 16 of 16 passed. Afterwards: the same row counts, 4 published results, and exactly 6 R2 objects, one per submission |
 
 **Other resources in the account:**
@@ -94,7 +94,7 @@ Put the printed `database_id` into `env.production.d1_databases[0].database_id` 
 Apply the migrations (never `prisma migrate` against D1):
 
 ```sh
-npx wrangler d1 migrations list DB --env production --remote     # 0001_baseline.sql to be applied
+npx wrangler d1 migrations list DB --env production --remote     # the migrations still to be applied
 npx wrangler d1 migrations apply DB --env production --remote
 npx wrangler d1 migrations list DB --env production --remote     # no migrations to apply
 ```
@@ -127,14 +127,14 @@ npx wrangler r2 bucket dev-url get inxapp-sms-files             # must say publi
 
 ### 8.3 Secrets, outside the repository
 
-Two values are generated once and kept in `~/.pen-sms-deploy/`, a folder outside the repository. Each command refuses to overwrite an existing file and prints nothing:
+Two values are generated once and kept in `~/.inxapp-sms-deploy/`, a folder outside the repository. Each command refuses to overwrite an existing file and prints nothing:
 
 ```sh
-mkdir -p ~/.pen-sms-deploy
+mkdir -p ~/.inxapp-sms-deploy
 # The Worker's internal secret, as a Wrangler secrets file (also set on Vercel in Phase 9):
-node -e "const fs=require('fs'),f=process.argv[1];if(fs.existsSync(f))throw new Error(f+' exists');fs.writeFileSync(f,JSON.stringify({WORKER_INTERNAL_SECRET:require('crypto').randomBytes(32).toString('base64url')})+'\n',{mode:0o600})" ~/.pen-sms-deploy/worker-secrets.json
+node -e "const fs=require('fs'),f=process.argv[1];if(fs.existsSync(f))throw new Error(f+' exists');fs.writeFileSync(f,JSON.stringify({WORKER_INTERNAL_SECRET:require('crypto').randomBytes(32).toString('base64url')})+'\n',{mode:0o600})" ~/.inxapp-sms-deploy/worker-secrets.json
 # The demo accounts' password (the public default Password123! is in this repository):
-node -e "const fs=require('fs'),f=process.argv[1];if(fs.existsSync(f))throw new Error(f+' exists');fs.writeFileSync(f,require('crypto').randomBytes(12).toString('base64url')+'\n',{mode:0o600})" ~/.pen-sms-deploy/demo-password.txt
+node -e "const fs=require('fs'),f=process.argv[1];if(fs.existsSync(f))throw new Error(f+' exists');fs.writeFileSync(f,require('crypto').randomBytes(12).toString('base64url')+'\n',{mode:0o600})" ~/.inxapp-sms-deploy/demo-password.txt
 ```
 
 - **Kept only there:** never in git, never on a command line.
@@ -148,10 +148,10 @@ Right before deploying, check that `sms-api` is still unused, because the deploy
 - **Dashboard:** `inxapp.net` → DNS has no `sms-api` record, and Workers & Pages lists no custom domain `sms-api.inxapp.net`.
 
 ```sh
-npx wrangler deploy --env production --secrets-file ~/.pen-sms-deploy/worker-secrets.json
+npx wrangler deploy --env production --secrets-file ~/.inxapp-sms-deploy/worker-secrets.json
 npx wrangler deployments list --env production
 npx wrangler secret list --env production                 # WORKER_INTERNAL_SECRET (name only)
-curl https://sms-api.inxapp.net/health                    # {"status":"ok","d1":"ok","schema":{"ok":true,…,"latestMigration":"0001_baseline.sql"},…}
+curl https://sms-api.inxapp.net/health                    # {"status":"ok","d1":"ok","schema":{"ok":true,…,"latestMigration":"…"},…}
 ```
 
 This deploys `inxapp-sms-api` with its secret, the D1 and R2 bindings and `ALLOWED_ORIGINS=https://sms.inxapp.net`. Because of the custom domain `sms-api.inxapp.net`, Cloudflare creates **one** DNS record (`sms-api`, proxied) and its certificate; the certificate can take a few minutes.
@@ -160,13 +160,13 @@ This deploys `inxapp-sms-api` with its secret, the D1 and R2 bindings and `ALLOW
 
 ### 8.5 Demo data (fictional, private password)
 
-The showcase uses the demo data of `prisma/d1/seed.ts`: fictional students with `@*.pensms.test` addresses. No real student information is imported. On the public site every demo account uses the password from `~/.pen-sms-deploy/demo-password.txt`, not the public `Password123!`.
+The showcase uses the demo data of `prisma/d1/seed.ts`: invented students whose addresses sit on the company’s own `sms.inxapp.net` subdomain. The people are fictional and no mailbox exists behind any of the addresses; no real student information is imported. On the public site every demo account uses the password from `~/.inxapp-sms-deploy/demo-password.txt`, not the public `Password123!`.
 
 Prepare on the day it is applied (the dates are relative to that day):
 
 ```sh
 cd ..    # repository root
-node node_modules/tsx/dist/cli.mjs worker/scripts/prepare-remote-seed.ts --password-file ~/.pen-sms-deploy/demo-password.txt
+node node_modules/tsx/dist/cli.mjs worker/scripts/prepare-remote-seed.ts --password-file ~/.inxapp-sms-deploy/demo-password.txt
 # → worker/.wrangler/remote-seed/seed.sql (46 INSERTs), files/ (6 PDFs), r2-commands.txt (git-ignored)
 cd worker
 npx wrangler d1 execute DB --env production --remote --file .wrangler/remote-seed/seed.sql
@@ -176,13 +176,13 @@ rm -rf .wrangler/remote-seed        # it holds the demo accounts' bcrypt hashes
 
 - **Nothing can be overwritten:** `seed.sql` is plain INSERTs. On a database that already has data it fails at the first row.
 - **All or nothing:** Wrangler applies a remote file in one import. If it fails, the database returns to its previous state.
-- **Staff account:** `registry@pensms.test`. Share the demo password only with the people the demo is meant for.
+- **Staff account:** `registry@sms.inxapp.net`. Share the demo password only with the people the demo is meant for.
 
 ### 8.6 Smoke test (Worker directly, before any traffic)
 
 ```sh
 cd ..    # repository root
-WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=~/.pen-sms-deploy/worker-secrets.json \
+WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=~/.inxapp-sms-deploy/worker-secrets.json \
   node node_modules/tsx/dist/cli.mjs worker/scripts/smoke-remote.ts
 ```
 
@@ -210,6 +210,70 @@ WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=~/.pen-sms
 ## Phase 9: Vercel and sms.inxapp.net
 
 (Filled in during Phase 9.)
+
+## Phase 10: Rebrand to INX SMS (INXAPP Limited)
+
+The product was renamed from PEN SMS to **INX SMS**, an INXAPP Limited product, and the demo
+accounts moved onto the company domain. No Cloudflare resource is created, renamed or deleted:
+`inxapp-sms`, `inxapp-sms-api` and `inxapp-sms-files` already carried the company name.
+
+**What changed that affects a running deployment:**
+
+| Change | Consequence |
+|---|---|
+| Account addresses: `registry@pensms.test` → `registry@sms.inxapp.net`, `<first>.<last>@student.pensms.test` → `<first>.<last>@sms.inxapp.net` | Everyone signs in with a new address. Passwords, roles, ids and all other data are untouched |
+| `prisma/d1/migrations/0002_rebrand_demo_emails.sql` | Rewrites the address suffixes in place. Idempotent, and a no-op on a database seeded after the rebrand |
+| `ISSUER`, `AUDIENCE` and the HKDF salt in `src/lib/internal-auth/token.ts` (`pen-sms*` → `inx-sms*`) | **The signing key is derived from these.** The Worker and Vercel must run the same build, or every signed request fails with 401 |
+| The secrets folder `~/.pen-sms-deploy/` → `~/.inxapp-sms-deploy/` | Rename it before running any command below. The secret values themselves do not change |
+
+### 10.1 Rename the secrets folder
+
+```sh
+mv ~/.pen-sms-deploy ~/.inxapp-sms-deploy      # only once; the files inside are unchanged
+ls ~/.inxapp-sms-deploy                        # worker-secrets.json  demo-password.txt
+```
+
+### 10.2 Apply the address migration
+
+```sh
+cd worker
+npx wrangler d1 execute DB --env production --remote --command "SELECT email FROM \"User\" ORDER BY email"
+npx wrangler d1 migrations list DB --env production --remote     # 0002_rebrand_demo_emails.sql to be applied
+npx wrangler d1 migrations apply DB --env production --remote
+npx wrangler d1 execute DB --env production --remote --command "SELECT email FROM \"User\" ORDER BY email"
+```
+
+The second listing must show seven `@sms.inxapp.net` addresses and no `pensms.test`. Row counts,
+results, submissions and the R2 objects are untouched — the migration only rewrites `User.email`.
+
+### 10.3 Deploy the Worker and Vercel together
+
+The token constants changed, so a Worker built before the rebrand cannot verify a request signed by
+a Vercel build after it, and the reverse. **Between the two deploys the site returns 401s.** Deploy
+back to back, at a quiet time, and do not leave the window open:
+
+```sh
+# 1. Worker first — it is the faster of the two to roll back.
+npx wrangler deploy --env production --secrets-file ~/.inxapp-sms-deploy/worker-secrets.json
+# 2. Then redeploy the Next.js app on Vercel (Deployments → Redeploy, "Use existing Build Cache" off).
+```
+
+`WORKER_INTERNAL_SECRET` itself does not change, so nothing needs re-entering on Vercel.
+
+**If the window goes wrong:** `npx wrangler rollback --env production` puts the previous Worker back,
+which matches the Vercel build that is still live.
+
+### 10.4 Verify
+
+```sh
+cd ..
+WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=~/.inxapp-sms-deploy/worker-secrets.json   node node_modules/tsx/dist/cli.mjs worker/scripts/smoke-remote.ts
+```
+
+All 16 checks must pass; the health check now expects `latestMigration` `0002_rebrand_demo_emails.sql`.
+Then sign in at `https://sms.inxapp.net` as `registry@sms.inxapp.net` with the password from
+`~/.inxapp-sms-deploy/demo-password.txt`, and confirm the INXAPP credit shows on the sign-in screen
+and in the sidebar footer.
 
 ## Rollback
 

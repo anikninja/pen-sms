@@ -36,11 +36,11 @@ describe("authentication", () => {
     const account = await data.findLoginAccount(STAFF_EMAIL)
     expect(account).toMatchObject({ email: STAFF_EMAIL, role: "STAFF", studentId: null })
     expect(await bcrypt.compare("Password123!", account!.passwordHash)).toBe(true)
-    expect(await data.findLoginAccount("nobody@pensms.test")).toBeNull()
+    expect(await data.findLoginAccount("nobody@sms.inxapp.net")).toBeNull()
   })
 
   it("loads the session from D1 and signs out deleted accounts", async () => {
-    expect(await data.loadSession(idOf("rahim.uddin@student.pensms.test"))).toMatchObject({ role: "STUDENT", name: "Rahim Uddin" })
+    expect(await data.loadSession(idOf("rahim.uddin@sms.inxapp.net"))).toMatchObject({ role: "STUDENT", name: "Rahim Uddin" })
     expect(await data.loadSession(crypto.randomUUID())).toBeNull()
   })
 
@@ -102,7 +102,7 @@ describe("staff operations", () => {
     const programmes = await data.listProgrammes()
     const student = await data.createStudent({
       fullName: "Data Layer",
-      email: "data.layer@student.pensms.test",
+      email: "data.layer@sms.inxapp.net",
       dateOfBirth: "2005-01-01",
       programmeId: programmes.find((p) => p.code === "BSC-CS")!.id,
       academicYear: YEAR,
@@ -110,12 +110,12 @@ describe("staff operations", () => {
       password: "Correct-Horse-9",
     })
     expect(student).toMatchObject({ studentId: sid(7), hasLogin: true })
-    const account = await data.findLoginAccount("data.layer@student.pensms.test")
+    const account = await data.findLoginAccount("data.layer@sms.inxapp.net")
     expect(await bcrypt.compare("Correct-Horse-9", account!.passwordHash)).toBe(true)
 
     const updated = await data.updateStudent(student.id, { fullName: "Data Layer 2" })
     expect(updated.fullName).toBe("Data Layer 2")
-    const dup = await data.createStudent({ ...student, email: "data.layer@student.pensms.test", dateOfBirth: "2005-01-01", programmeId: student.programme.id, password: undefined }).catch((e: unknown) => e)
+    const dup = await data.createStudent({ ...student, email: "data.layer@sms.inxapp.net", dateOfBirth: "2005-01-01", programmeId: student.programme.id, password: undefined }).catch((e: unknown) => e)
     expect(dup).toBeInstanceOf(DomainError)
     expect(dup).toMatchObject({ code: "CONFLICT", fieldErrors: { email: ["A student with this email already exists."] } })
   })
@@ -155,15 +155,15 @@ describe("staff operations", () => {
   })
 
   it("keeps the Worker's role rules: a student cannot use staff operations", async () => {
-    signIn("rahim.uddin@student.pensms.test")
+    signIn("rahim.uddin@sms.inxapp.net")
     await expect(data.listStudents({})).rejects.toMatchObject({ code: "FORBIDDEN", message: "Only Registry staff can do this." })
   })
 })
 
 describe("the signed-in student's pages", () => {
   it("dashboard, fees, assessments, marksheet", async () => {
-    signIn("rahim.uddin@student.pensms.test")
-    const studentId = w.users.get("rahim.uddin@student.pensms.test")!.studentId!
+    signIn("rahim.uddin@sms.inxapp.net")
+    const studentId = w.users.get("rahim.uddin@sms.inxapp.net")!.studentId!
     const overview = await data.getMyOverview(studentId)
     expect(overview.student.fullName).toBe("Rahim Uddin")
     expect(overview.nextDeadline?.submissionDeadline).toBeInstanceOf(Date)
@@ -175,8 +175,8 @@ describe("the signed-in student's pages", () => {
 
 describe("files", () => {
   it("uploads through a Worker URL (server side) and downloads through a redirect", async () => {
-    signIn("nusrat.jahan@student.pensms.test")
-    const studentId = w.users.get("nusrat.jahan@student.pensms.test")!.studentId!
+    signIn("nusrat.jahan@sms.inxapp.net")
+    const studentId = w.users.get("nusrat.jahan@sms.inxapp.net")!.studentId!
     const grant = await data.requestSubmissionUpload(ASSESSMENT.ALGO, { name: "a.pdf", type: "application/pdf", size: 5 })
     expect(grant).toMatchObject({ method: "PUT", headers: { "Content-Type": "application/pdf" } })
     expect(grant!.expiresAt).toBeInstanceOf(Date)
@@ -186,20 +186,20 @@ describe("files", () => {
     expect(submission).toMatchObject({ fileName: "Data Layer.pdf", replaced: true })
     expect(submission.submittedAt).toBeInstanceOf(Date)
 
-    const session = (await data.loadSession(idOf("nusrat.jahan@student.pensms.test")))!
+    const session = (await data.loadSession(idOf("nusrat.jahan@sms.inxapp.net")))!
     const download = await data.getSubmissionDownload(submission.id, session)
     expect(download.kind).toBe("redirect")
     const response = await fetch((download as { url: string }).url)
     expect(response.status).toBe(200)
     expect(await response.text()).toBe("%PDF-1.4 data layer")
 
-    signIn("rahim.uddin@student.pensms.test")
-    const rahim = (await data.loadSession(idOf("rahim.uddin@student.pensms.test")))!
+    signIn("rahim.uddin@sms.inxapp.net")
+    const rahim = (await data.loadSession(idOf("rahim.uddin@sms.inxapp.net")))!
     await expect(data.getSubmissionDownload(submission.id, rahim)).rejects.toMatchObject({ code: "NOT_FOUND", message: "File not found." })
   })
 
   it("rejects an invalid file before any upload", async () => {
-    signIn("nusrat.jahan@student.pensms.test")
+    signIn("nusrat.jahan@sms.inxapp.net")
     await expect(data.requestSubmissionUpload(ASSESSMENT.ALGO, { name: "a.txt", type: "text/plain", size: 5 })).rejects.toMatchObject({
       code: "VALIDATION",
       fieldErrors: { file: ["Only PDF and DOCX files are accepted."] },

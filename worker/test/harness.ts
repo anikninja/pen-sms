@@ -110,7 +110,7 @@ export async function startTestWorker(
     prepare?: (db: D1Client, files: R2Bucket) => Promise<void>
   } = {}
 ): Promise<TestWorker> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "pen-sms-worker-"))
+  const dir = await mkdtemp(path.join(os.tmpdir(), "inx-sms-worker-"))
   if (options.migrate !== false) await migrate(dir)
 
   const users = new Map<string, SeededUser>()
@@ -190,5 +190,5 @@ export const ASSESSMENT = {
   STRAT: "5e3d0a1c-0000-4000-8000-000000000103",
   ACC: "5e3d0a1c-0000-4000-8000-000000000104",
 } as const
-export const STAFF_EMAIL = "registry@pensms.test"
+export const STAFF_EMAIL = "registry@sms.inxapp.net"
 export const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date())

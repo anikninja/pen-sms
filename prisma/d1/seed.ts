@@ -73,15 +73,15 @@ export async function seedD1(db: D1Client, now = new Date(), options: { password
     status: EnrolmentStatus
     payments: { amount: string; daysAgo: number }[]
   }[] = [
-    { seq: 1, fullName: "Nusrat Jahan", email: "nusrat.jahan@student.pensms.test", dateOfBirth: "2004-03-14", programme: "BSC-CS", status: "ENROLLED", payments: [{ amount: "150000.00", daysAgo: 60 }] },
-    { seq: 2, fullName: "Rahim Uddin", email: "rahim.uddin@student.pensms.test", dateOfBirth: "2003-11-02", programme: "BSC-CS", status: "ENROLLED", payments: [{ amount: "50000.00", daysAgo: 75 }, { amount: "40000.00", daysAgo: 40 }] },
-    { seq: 3, fullName: "Abir Hossain", email: "abir.hossain@student.pensms.test", dateOfBirth: "2004-07-21", programme: "BSC-CS", status: "ENROLLED", payments: [] },
-    { seq: 4, fullName: "Tanvir Ahmed", email: "tanvir.ahmed@student.pensms.test", dateOfBirth: "2003-05-09", programme: "BSC-CS", status: "DEFERRED", payments: [{ amount: "75000.00", daysAgo: 50 }] },
-    { seq: 5, fullName: "Farhana Akter", email: "farhana.akter@student.pensms.test", dateOfBirth: "1998-09-30", programme: "MBA", status: "ENROLLED", payments: [{ amount: "100000.00", daysAgo: 20 }] },
-    { seq: 6, fullName: "Sadia Islam", email: "sadia.islam@student.pensms.test", dateOfBirth: "1997-01-18", programme: "MBA", status: "COMPLETED", payments: [{ amount: "250000.00", daysAgo: 90 }] },
+    { seq: 1, fullName: "Nusrat Jahan", email: "nusrat.jahan@sms.inxapp.net", dateOfBirth: "2004-03-14", programme: "BSC-CS", status: "ENROLLED", payments: [{ amount: "150000.00", daysAgo: 60 }] },
+    { seq: 2, fullName: "Rahim Uddin", email: "rahim.uddin@sms.inxapp.net", dateOfBirth: "2003-11-02", programme: "BSC-CS", status: "ENROLLED", payments: [{ amount: "50000.00", daysAgo: 75 }, { amount: "40000.00", daysAgo: 40 }] },
+    { seq: 3, fullName: "Abir Hossain", email: "abir.hossain@sms.inxapp.net", dateOfBirth: "2004-07-21", programme: "BSC-CS", status: "ENROLLED", payments: [] },
+    { seq: 4, fullName: "Tanvir Ahmed", email: "tanvir.ahmed@sms.inxapp.net", dateOfBirth: "2003-05-09", programme: "BSC-CS", status: "DEFERRED", payments: [{ amount: "75000.00", daysAgo: 50 }] },
+    { seq: 5, fullName: "Farhana Akter", email: "farhana.akter@sms.inxapp.net", dateOfBirth: "1998-09-30", programme: "MBA", status: "ENROLLED", payments: [{ amount: "100000.00", daysAgo: 20 }] },
+    { seq: 6, fullName: "Sadia Islam", email: "sadia.islam@sms.inxapp.net", dateOfBirth: "1997-01-18", programme: "MBA", status: "COMPLETED", payments: [{ amount: "250000.00", daysAgo: 90 }] },
   ]
 
-  const STAFF = [{ name: "Registry Admin", email: "registry@pensms.test" }]
+  const STAFF = [{ name: "Registry Admin", email: "registry@sms.inxapp.net" }]
 
   // Fixed ids keep assessments and submissions idempotent (they have no natural unique key).
   const ASSESSMENTS = [

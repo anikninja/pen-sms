@@ -171,7 +171,7 @@ describe("assessment", () => {
 
 describe("login and parseInput", () => {
   it("normalises the email before validating it", () => {
-    expect(loginSchema.parse({ email: " REGISTRY@pensms.test ", password: "x" }).email).toBe("registry@pensms.test")
+    expect(loginSchema.parse({ email: " REGISTRY@sms.inxapp.net ", password: "x" }).email).toBe("registry@sms.inxapp.net")
   })
 
   it("throws a VALIDATION DomainError with field errors", () => {

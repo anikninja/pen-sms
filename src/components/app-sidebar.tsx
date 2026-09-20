@@ -11,6 +11,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 
+import { InxappCreditCompact } from "@/components/inxapp-credit"
 import { NavMain, type NavItem } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -23,6 +24,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { ROLE_HOME, type AppRole } from "@/lib/auth/roles"
+import { PRODUCT } from "@/lib/brand"
 
 // Each build phase adds its screens here (docs/PROGRESS.md).
 const NAV: Record<AppRole, NavItem[]> = {
@@ -59,7 +61,7 @@ export function AppSidebar({
               render={<Link href={ROLE_HOME[role]} />}
             >
               <GraduationCapIcon className="size-5!" />
-              <span className="text-base font-semibold">INX SMS</span>
+              <span className="text-base font-semibold">{PRODUCT.name}</span>
               <span className="ml-auto text-xs text-muted-foreground">
                 {role === "STAFF" ? "Registry" : "Student"}
               </span>
@@ -72,6 +74,7 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />
+        <InxappCreditCompact />
       </SidebarFooter>
     </Sidebar>
   )

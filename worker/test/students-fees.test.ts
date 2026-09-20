@@ -53,7 +53,7 @@ describe("students", () => {
 
   const newStudent = () => ({
     fullName: "Worker Created",
-    email: "worker.created@student.pensms.test",
+    email: "worker.created@sms.inxapp.net",
     dateOfBirth: "2005-02-10",
     programmeId: byStudentId[sid(1)].programme.id,
     academicYear: YEAR,
@@ -71,7 +71,7 @@ describe("students", () => {
   })
 
   it("rejects duplicates and invalid input with field errors", async () => {
-    const dup = await w.call("POST", "/v1/students", { as: staff, body: { ...newStudent(), email: "Worker.Created@student.pensms.test", passwordHash: undefined } })
+    const dup = await w.call("POST", "/v1/students", { as: staff, body: { ...newStudent(), email: "Worker.Created@sms.inxapp.net", passwordHash: undefined } })
     expect(dup).toMatchObject({ status: 409, data: { error: "A student with this email already exists.", code: "CONFLICT" } })
     expect(dup.data.fieldErrors.email).toBeDefined()
 
@@ -107,7 +107,7 @@ describe("students", () => {
     const fees = await w.call("GET", `/v1/students/${id}/fees`, { as: staff })
     expect(fees.data.summary).toMatchObject({ totalFee: "150000.00", matchesTariff: false })
 
-    expect((await w.call("PATCH", `/v1/students/${id}`, { as: staff, body: { email: "rahim.uddin@student.pensms.test" } })).status).toBe(409)
+    expect((await w.call("PATCH", `/v1/students/${id}`, { as: staff, body: { email: "rahim.uddin@sms.inxapp.net" } })).status).toBe(409)
     expect((await w.call("PATCH", `/v1/students/${id}`, { as: staff, body: {} })).status).toBe(400)
   })
 })

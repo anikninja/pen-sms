@@ -11,7 +11,7 @@ let rahimId: string
 beforeAll(async () => {
   w = await startTestWorker({ seed: true })
   staffId = w.users.get(STAFF_EMAIL)!.id
-  rahimId = w.users.get("rahim.uddin@student.pensms.test")!.id
+  rahimId = w.users.get("rahim.uddin@sms.inxapp.net")!.id
 })
 afterAll(async () => {
   await w?.dispose()
@@ -21,7 +21,7 @@ describe("GET /health", () => {
   it("reports the Worker, D1 and the migrated schema without any secrets or data", async () => {
     const { status, data, headers } = await w.call("GET", "/health")
     expect(status).toBe(200)
-    expect(data).toMatchObject({ status: "ok", d1: "ok", schema: { ok: true, missingTables: [], latestMigration: "0001_baseline.sql" } })
+    expect(data).toMatchObject({ status: "ok", d1: "ok", schema: { ok: true, missingTables: [], latestMigration: "0002_rebrand_demo_emails.sql" } })
     expect(Object.keys(data).sort()).toEqual(["d1", "schema", "status", "time"])
     expect(JSON.stringify(data)).not.toContain(TEST_SECRET)
     expect(headers.get("cache-control")).toBe("no-store")
@@ -109,7 +109,7 @@ describe("internal token (trust boundary)", () => {
   it("reads the role from D1, never from the request", async () => {
     const { status, data } = await w.call("GET", "/v1/session", { as: rahimId })
     expect(status).toBe(200)
-    expect(data.session).toMatchObject({ userId: rahimId, role: "STUDENT", email: "rahim.uddin@student.pensms.test" })
+    expect(data.session).toMatchObject({ userId: rahimId, role: "STUDENT", email: "rahim.uddin@sms.inxapp.net" })
     expect(data.session.studentId).toEqual(expect.any(String))
 
     // Headers claiming another identity or role are ignored.
@@ -140,14 +140,14 @@ describe("internal token (trust boundary)", () => {
 
 describe("POST /v1/auth/lookup (service)", () => {
   it("returns the account with its password hash for the Next.js server to compare", async () => {
-    const { status, data } = await w.call("POST", "/v1/auth/lookup", { as: null, body: { email: " Registry@PENSMS.test " } })
+    const { status, data } = await w.call("POST", "/v1/auth/lookup", { as: null, body: { email: " Registry@SMS.INXAPP.net " } })
     expect(status).toBe(200)
     expect(data.user).toMatchObject({ id: staffId, email: STAFF_EMAIL, role: "STAFF", studentId: null })
     expect(data.user.passwordHash).toMatch(/^[$]2[aby][$]10[$]/)
   })
 
   it("returns null for an unknown email and 400 for an invalid one", async () => {
-    expect((await w.call("POST", "/v1/auth/lookup", { as: null, body: { email: "nobody@pensms.test" } })).data).toEqual({ user: null })
+    expect((await w.call("POST", "/v1/auth/lookup", { as: null, body: { email: "nobody@sms.inxapp.net" } })).data).toEqual({ user: null })
     const invalid = await w.call("POST", "/v1/auth/lookup", { as: null, body: { email: "nope" } })
     expect(invalid.status).toBe(400)
     expect(invalid.data.fieldErrors.email).toBeDefined()

@@ -1596,8 +1596,8 @@ The proxy is a convenience, not the security boundary (Next.js docs: Proxy is fo
 Created by the seed script. Every account uses the password `Password123!`.
 
 ```text
-Staff    registry@pensms.test
-Student  <first>.<last>@student.pensms.test   e.g. rahim.uddin@student.pensms.test (SMS-YYYY-0002)
+Staff    registry@sms.inxapp.net
+Student  <first>.<last>@sms.inxapp.net   e.g. rahim.uddin@sms.inxapp.net (SMS-YYYY-0002)
 ```
 
 The login page lists them only when `DEMO_MODE="true"`.

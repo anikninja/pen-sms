@@ -3,7 +3,7 @@
  * prisma/d1/migrations/0001_baseline.sql, through Prisma's native SQLite engine — for trying out the
  * D1 schema and services. Never touches PostgreSQL (DATABASE_URL is not read) or Cloudflare.
  *
- *   D1_LOCAL_SQLITE_URL="file:/absolute/path/pen-sms-d1.sqlite" npx tsx prisma/d1/seed-local.ts
+ *   D1_LOCAL_SQLITE_URL="file:/absolute/path/inx-sms-d1.sqlite" npx tsx prisma/d1/seed-local.ts
  *
  * Not for Wrangler's local D1 state or a real D1 database: the native engine stores DateTime as integer
  * milliseconds, @prisma/adapter-d1 as ISO text. Seed real D1 through the Worker (a later phase).
@@ -19,7 +19,7 @@ import { seedD1 } from "./seed"
 async function main() {
   const url = process.env.D1_LOCAL_SQLITE_URL
   if (!url?.startsWith("file:")) {
-    throw new Error('Set D1_LOCAL_SQLITE_URL to a local SQLite file, e.g. "file:/tmp/pen-sms-d1.sqlite".')
+    throw new Error('Set D1_LOCAL_SQLITE_URL to a local SQLite file, e.g. "file:/tmp/inx-sms-d1.sqlite".')
   }
   if (url.includes(".wrangler")) {
     throw new Error("Refusing to seed Wrangler's D1 state with the native engine (different DateTime encoding).")

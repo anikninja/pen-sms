@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { COMPANY, PRODUCT } from "@/lib/brand";
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -17,8 +18,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "INX SMS",
-  description: "A simple Student Management System built with Next.js, Prisma, and PostgreSQL.",
+  title: PRODUCT.name,
+  description: `${PRODUCT.description} ${COMPANY.name}.`,
+  applicationName: PRODUCT.name,
+  authors: [{ name: COMPANY.name, url: COMPANY.url }],
+  creator: COMPANY.name,
+  publisher: COMPANY.name,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

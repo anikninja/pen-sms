@@ -75,13 +75,13 @@ const upload = (file) => {
 const uploadsCount = () => (BACKEND === "postgres" ? fs.readdirSync(UPLOADS).filter((f) => f !== ".gitkeep").length : 0)
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
-const staff = await login("registry@pensms.test")
-const rahim = await login("rahim.uddin@student.pensms.test") // SMS-Y-0002, BSC-CS, overdue, late DB submission
-const nusrat = await login("nusrat.jahan@student.pensms.test") // SMS-Y-0001, fully paid
-const abir = await login("abir.hossain@student.pensms.test") // SMS-Y-0003, no payments, no DB submission
-const tanvir = await login("tanvir.ahmed@student.pensms.test") // DEFERRED
-const farhana = await login("farhana.akter@student.pensms.test") // MBA
-const sadia = await login("sadia.islam@student.pensms.test") // MBA, COMPLETED
+const staff = await login("registry@sms.inxapp.net")
+const rahim = await login("rahim.uddin@sms.inxapp.net") // SMS-Y-0002, BSC-CS, overdue, late DB submission
+const nusrat = await login("nusrat.jahan@sms.inxapp.net") // SMS-Y-0001, fully paid
+const abir = await login("abir.hossain@sms.inxapp.net") // SMS-Y-0003, no payments, no DB submission
+const tanvir = await login("tanvir.ahmed@sms.inxapp.net") // DEFERRED
+const farhana = await login("farhana.akter@sms.inxapp.net") // MBA
+const sadia = await login("sadia.islam@sms.inxapp.net") // MBA, COMPLETED
 
 // ─── Auth on the API ─────────────────────────────────────────────────────────
 check("no session → 401", (await api(null, "GET", "/api/students")).status === 401)
@@ -93,14 +93,14 @@ check("staff on /api/me/marksheet → 403", (await api(staff, "GET", "/api/me/ma
 check("staff uploading a submission → 403", (await api(staff, "POST", `/api/assessments/5e3d0a1c-0000-4000-8000-000000000102/submissions`, upload(pdfFile()))).status === 403)
 
 // ─── Sign-in, sessions and sign-out ──────────────────────────────────────────
-check("wrong password is refused", (await tryLogin("registry@pensms.test", "wrong-password")) === null)
-check("unknown email is refused", (await tryLogin("nobody@pensms.test")) === null)
+check("wrong password is refused", (await tryLogin("registry@sms.inxapp.net", "wrong-password")) === null)
+check("unknown email is refused", (await tryLogin("nobody@sms.inxapp.net")) === null)
 {
   const forged = "authjs.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIn0..forged.forged.forged"
   check("tampered or expired session cookie → 401", (await api(forged, "GET", "/api/students")).status === 401)
 }
 {
-  const session = await tryLogin("registry@pensms.test")
+  const session = await tryLogin("registry@sms.inxapp.net")
   check("fresh session works", (await api(session.cookie, "GET", "/api/students")).status === 200)
   const csrf = await fetch(`${BASE}/api/auth/csrf`, { headers: { cookie: session.cookie } })
   const { csrfToken } = await csrf.json()
@@ -139,7 +139,7 @@ check("invalid JSON body → 400", (await api(staff, "POST", "/api/students", "{
 // ─── Students: create ────────────────────────────────────────────────────────
 const newStudent = {
   fullName: "E2E Created",
-  email: "e2e.created@student.pensms.test",
+  email: "e2e.created@sms.inxapp.net",
   dateOfBirth: "2005-02-10",
   programmeId: bscId,
   academicYear: YEAR,
@@ -156,7 +156,7 @@ check("login created", created.data.student?.hasLogin === true)
   check("new student past tariff due date is overdue", s?.status === "OVERDUE", s?.status)
 }
 {
-  const dup = await api(staff, "POST", "/api/students", { ...newStudent, email: "E2E.Created@student.pensms.test", password: undefined })
+  const dup = await api(staff, "POST", "/api/students", { ...newStudent, email: "E2E.Created@sms.inxapp.net", password: undefined })
   check("duplicate email (case-insensitive) → 409", dup.status === 409 && dup.data.error === "A student with this email already exists." && dup.data.fieldErrors?.email, dup)
 }
 {
@@ -191,7 +191,7 @@ check("login created", created.data.student?.hasLogin === true)
 
 // New login works and sees an empty marksheet.
 {
-  const newLogin = await login("e2e.created@student.pensms.test")
+  const newLogin = await login("e2e.created@sms.inxapp.net")
   const r = await api(newLogin, "GET", "/api/me/marksheet")
   check("created student can sign in; empty marksheet", r.status === 200 && r.data.results.length === 0, r.data)
 }
@@ -205,7 +205,7 @@ check("login created", created.data.student?.hasLogin === true)
   check("programme change keeps fee, matchesTariff false", s.totalFee === "150000.00" && s.matchesTariff === false, s)
   const tariff = await api(staff, "PUT", `/api/students/${id}/fee`, { source: "TARIFF" })
   check("reassign from tariff → MBA fee", tariff.status === 200 && tariff.data.summary.totalFee === "250000.00" && tariff.data.summary.matchesTariff, tariff.data)
-  const dup = await api(staff, "PATCH", `/api/students/${id}`, { email: "rahim.uddin@student.pensms.test" })
+  const dup = await api(staff, "PATCH", `/api/students/${id}`, { email: "rahim.uddin@sms.inxapp.net" })
   check("update to existing email → 409", dup.status === 409, dup)
   const empty = await api(staff, "PATCH", `/api/students/${id}`, {})
   check("empty update → 400", empty.status === 400, empty)

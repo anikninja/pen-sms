@@ -51,7 +51,7 @@ npm --prefix worker run db:migrations:list:local
 ```
 
 - **Seed:** it is idempotent, and every account's password is `Password123!`.
-- **Accounts:** the staff account is `registry@pensms.test`; each student signs in with their student email, e.g. `rahim.uddin@student.pensms.test`.
+- **Accounts:** the staff account is `registry@sms.inxapp.net`; each student signs in with their student email, e.g. `rahim.uddin@sms.inxapp.net`.
 
 ## 5. Start the Worker
 

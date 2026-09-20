@@ -47,9 +47,9 @@ const ok = async (res, expected = 200) => {
 }
 
 const logins = []
-for (let i = 0; i < 5; i++) logins.push((await login("registry@pensms.test")).ms)
-const staff = (await login("registry@pensms.test")).cookie
-const student = (await login("farhana.akter@student.pensms.test")).cookie
+for (let i = 0; i < 5; i++) logins.push((await login("registry@sms.inxapp.net")).ms)
+const staff = (await login("registry@sms.inxapp.net")).cookie
+const student = (await login("farhana.akter@sms.inxapp.net")).cookie
 const students = await (await fetch(`${BASE}/api/students`, { headers: { cookie: staff } })).json()
 const farhana = students.students.find((s) => s.fullName === "Farhana Akter").id
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date())

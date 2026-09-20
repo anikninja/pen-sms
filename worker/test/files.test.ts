@@ -18,12 +18,12 @@ const SADIA_ACC_SUBMISSION = "5e3d0a1c-0000-4000-8000-000000000206" // its objec
 let w: TestWorker
 const user = (email: string) => w.users.get(email)!.id
 const staff = () => user(STAFF_EMAIL)
-const rahim = () => user("rahim.uddin@student.pensms.test")
-const abir = () => user("abir.hossain@student.pensms.test")
-const nusrat = () => user("nusrat.jahan@student.pensms.test")
-const tanvir = () => user("tanvir.ahmed@student.pensms.test")
-const farhana = () => user("farhana.akter@student.pensms.test")
-const sadia = () => user("sadia.islam@student.pensms.test")
+const rahim = () => user("rahim.uddin@sms.inxapp.net")
+const abir = () => user("abir.hossain@sms.inxapp.net")
+const nusrat = () => user("nusrat.jahan@sms.inxapp.net")
+const tanvir = () => user("tanvir.ahmed@sms.inxapp.net")
+const farhana = () => user("farhana.akter@sms.inxapp.net")
+const sadia = () => user("sadia.islam@sms.inxapp.net")
 
 beforeAll(async () => {
   w = await startTestWorker({
@@ -163,7 +163,7 @@ describe("uploading", () => {
     expect(await put("http://localhost/v1/uploads", bytes("x"), PDF)).toMatchObject({ status: 401, data: { error: invalid } })
     expect((await put("http://localhost/v1/uploads?token=v1.abc.def", bytes("x"), PDF)).status).toBe(401)
 
-    const claims = { sub: nusrat(), sid: w.users.get("nusrat.jahan@student.pensms.test")!.studentId!, aid: ASSESSMENT.ALGO, name: "a.pdf", type: PDF, size: 1 }
+    const claims = { sub: nusrat(), sid: w.users.get("nusrat.jahan@sms.inxapp.net")!.studentId!, aid: ASSESSMENT.ALGO, name: "a.pdf", type: PDF, size: 1 }
     const expired = await signFileToken(TEST_SECRET, { typ: "upload", ...claims }, new Date(Date.now() - 10 * 60_000))
     expect((await put(`http://localhost/v1/uploads?token=${expired.token}`, bytes("x"), PDF)).status).toBe(401)
     const forged = await signFileToken("another-secret-of-sufficient-length-123456", { typ: "upload", ...claims })

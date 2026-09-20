@@ -26,7 +26,7 @@ export type TestDb = {
  * integer milliseconds here) and D1's 98 bound-parameter limit (SQLite allows far more).
  */
 export async function createTestDb(): Promise<TestDb> {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "pen-sms-d1-"))
+  const dir = mkdtempSync(path.join(os.tmpdir(), "inx-sms-d1-"))
   const file = path.join(dir, "test.sqlite")
   const raw = new DatabaseSync(file)
   raw.exec(readFileSync(BASELINE, "utf8"))

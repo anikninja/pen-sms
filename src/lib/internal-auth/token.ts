@@ -23,8 +23,8 @@ export const API_TOKEN_TTL_SECONDS = 60
 export const MAX_CLOCK_SKEW_SECONDS = 30
 const MAX_TOKEN_LENGTH = 4096
 const VERSION = "v1"
-const ISSUER = "pen-sms-web"
-const AUDIENCE = "pen-sms-worker"
+const ISSUER = "inx-sms-web"
+const AUDIENCE = "inx-sms-worker"
 
 type KeyPurpose = "api" | "file"
 
@@ -64,7 +64,7 @@ function hmacKey(secret: string, purpose: KeyPurpose): Promise<CryptoKey> {
       .importKey("raw", encoder.encode(secret), "HKDF", false, ["deriveKey"])
       .then((base) =>
         crypto.subtle.deriveKey(
-          { name: "HKDF", hash: "SHA-256", salt: encoder.encode("pen-sms"), info: encoder.encode(`pen-sms/${purpose}-token/v1`) },
+          { name: "HKDF", hash: "SHA-256", salt: encoder.encode("inx-sms"), info: encoder.encode(`inx-sms/${purpose}-token/v1`) },
           base,
           { name: "HMAC", hash: "SHA-256", length: 256 },
           false,

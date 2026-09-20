@@ -35,9 +35,9 @@ if (!BASE || !SECRET) {
   process.exit(1)
 }
 
-const STAFF = "registry@pensms.test"
-const FARHANA = "farhana.akter@student.pensms.test"
-const RAHIM = "rahim.uddin@student.pensms.test"
+const STAFF = "registry@sms.inxapp.net"
+const FARHANA = "farhana.akter@sms.inxapp.net"
+const RAHIM = "rahim.uddin@sms.inxapp.net"
 const STRAT = "5e3d0a1c-0000-4000-8000-000000000103" // open MBA assessment; Farhana has a submission
 
 let failures = 0
@@ -61,7 +61,7 @@ async function call(method: string, path: string, userId: string | null, body?: 
 async function main() {
   const health = await fetch(new URL("/health", BASE))
   const healthBody = (await health.json()) as { status: string; schema?: { latestMigration: string | null } }
-  check("health: Worker, D1 and schema", health.status === 200 && healthBody.status === "ok" && healthBody.schema?.latestMigration === "0001_baseline.sql", healthBody)
+  check("health: Worker, D1 and schema", health.status === 200 && healthBody.status === "ok" && healthBody.schema?.latestMigration === "0002_rebrand_demo_emails.sql", healthBody)
 
   if (new URL(BASE!).protocol === "https:") {
     const plain = new URL("/health", BASE)

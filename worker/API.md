@@ -61,7 +61,7 @@ Sent as `Authorization: Bearer v1.<claims>.<signature>` on every request except 
 
 | Claim | Meaning |
 |---|---|
-| `iss` / `aud` / `typ` | `"pen-sms-web"` / `"pen-sms-worker"` / `"api"` |
+| `iss` / `aud` / `typ` | `"inx-sms-web"` / `"inx-sms-worker"` / `"api"` |
 | `sub` | The signed-in user's id, or `null` for the login lookup. **No role, no student id, no permissions.** |
 | `iat`, `exp` | Issued at / expires. At most **60 s** apart. ±30 s clock skew is accepted. A token claiming a longer lifetime is refused even if validly signed |
 | `jti` | Random id, for log correlation |

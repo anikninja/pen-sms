@@ -1,10 +1,16 @@
 # INX SMS — Registry Module
 
-A Student Management System for a university **Registry team**, built with Next.js 16, PostgreSQL and Prisma for the PEN Global technical assessment. Registry staff manage students, fees, assessments and results. Students sign in to see their own fees, submit coursework and read their published results.
+<p align="left">
+  <img src="public/brand/inxapp-logo.png" alt="INXAPP Limited" width="240">
+</p>
+
+**An [INXAPP Limited](https://www.inxapp.net) product.** INX SMS is INXAPP's first product — the MVP that the company's Student Management System is built on.
+
+A Student Management System for a university **Registry team**, built with Next.js 16, PostgreSQL and Prisma. Registry staff manage students, fees, assessments and results. Students sign in to see their own fees, submit coursework and read their published results. It began as the PEN Global technical assessment.
 
 > Full technical documentation (architecture, API, business rules, design decisions, edge cases, testing): **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**
 >
-> Illustrated staff and student usage guide (PDF, 17 slides): **[docs/PEN-SMS-Usage-Guide.pdf](docs/PEN-SMS-Usage-Guide.pdf)**
+> Illustrated staff and student usage guide (PDF, 17 slides): **[docs/PEN-SMS-Usage-Guide.pdf](docs/PEN-SMS-Usage-Guide.pdf)** — its screenshots predate the rename, so they still show the old product name. The workflows are unchanged.
 
 ---
 
@@ -122,10 +128,10 @@ All demo accounts use the password **`Password123!`**.
 
 | Role | Email |
 |---|---|
-| Staff (Registry) | `registry@pensms.test` |
-| Student | `rahim.uddin@student.pensms.test` |
+| Staff (Registry) | `registry@sms.inxapp.net` |
+| Student | `rahim.uddin@sms.inxapp.net` |
 
-Every seeded student can sign in the same way: `firstname.lastname@student.pensms.test` (e.g. `nusrat.jahan@…`, `tanvir.ahmed@…`, `farhana.akter@…`).
+Every seeded student can sign in the same way: `firstname.lastname@sms.inxapp.net` (e.g. `nusrat.jahan@…`, `tanvir.ahmed@…`, `farhana.akter@…`).
 
 There is one sign-in page for both roles. Staff land on the Registry dashboard, students on their own portal, and neither can open the other's pages. Sign out from the user menu at the bottom of the sidebar.
 
@@ -133,7 +139,7 @@ There is one sign-in page for both roles. Staff land on the Registry dashboard, 
 
 ## Staff usage manual
 
-Sign in as `registry@pensms.test`.
+Sign in as `registry@sms.inxapp.net`.
 
 | Task | How |
 |---|---|
@@ -154,7 +160,7 @@ Sign in as `registry@pensms.test`.
 
 ## Student usage manual
 
-Sign in as a student, e.g. `rahim.uddin@student.pensms.test`.
+Sign in as a student, e.g. `rahim.uddin@sms.inxapp.net`.
 
 | Task | How |
 |---|---|
@@ -184,6 +190,15 @@ I made the product and security decisions, and every change was reviewed, run an
 
 ## Project ownership and credit
 
-**INX SMS — Registry Module** was designed and built by **Anik Ninja** ([@anikninja](https://github.com/anikninja)) as a technical assessment for PEN Global.
+<img src="public/brand/inxapp-logo.png" alt="INXAPP Limited" width="200">
 
-© 2026 Anik Ninja. All rights reserved. The assessment brief is not included in this repository.
+**INX SMS** is a product of **INXAPP Limited** — [www.inxapp.net](https://www.inxapp.net).
+
+> **Innovate. Execute. Excel.**
+> Building Next-Gen Software Solutions for a Smarter Tomorrow.
+
+INXAPP Limited builds custom software, mobile apps, cloud and DevOps platforms, AI/ML and data solutions, and enterprise systems and ERP. INX SMS is the company's MVP: the Registry module shipped here is the foundation the wider Student Management System is built on.
+
+Designed and built by **Anik Ninja** ([@anikninja](https://github.com/anikninja)), founder of INXAPP Limited. The project began as a technical assessment for PEN Global; the assessment brief is not included in this repository.
+
+© 2026 INXAPP Limited. All rights reserved.

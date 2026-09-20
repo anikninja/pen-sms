@@ -78,7 +78,7 @@ function sqlValue(value: unknown): string {
 async function main() {
   const out = outDir()
   const password = demoPassword()
-  const state = mkdtempSync(path.join(os.tmpdir(), "pen-sms-remote-seed-"))
+  const state = mkdtempSync(path.join(os.tmpdir(), "inx-sms-remote-seed-"))
   try {
     execFileSync(process.execPath, [path.join(WORKER_DIR, "node_modules", "wrangler", "bin", "wrangler.js"), "d1", "migrations", "apply", "DB", "--local", "--persist-to", state], {
       cwd: WORKER_DIR,
