@@ -213,6 +213,23 @@ WORKER_API_URL=https://sms-api.inxapp.net WORKER_INTERNAL_SECRET_FILE=~/.inxapp-
 
 ## Phase 10: Rebrand to INX SMS (INXAPP Limited)
 
+### Status (21 Sep 2026): done
+
+| Step | Result |
+|---|---|
+| 10.1 Secrets folder | Renamed to `~/.inxapp-sms-deploy/`; the values are unchanged |
+| 10.2 D1 addresses | `0002_rebrand_demo_emails.sql` applied (3 commands). 7 of 8 accounts moved to `@sms.inxapp.net`; row counts unchanged in every other table |
+| 10.3 Worker | `inxapp-sms-api` version `01bddb8a-8c05-4310-a78d-02bd7c5fd961` |
+| 10.4 Verify | Smoke test 16 of 16 passed; staff and student both sign in at `https://sms.inxapp.net` |
+
+**What went wrong the first time:** Vercel was redeployed on its own. The Worker was still the
+pre-rebrand build, so it rejected every token the new Vercel build signed and *no* account could
+sign in — with the old addresses or the new ones. The Worker deploy is not optional, and it is the
+half to do first: it restores sign-in on the old addresses even before the migration runs.
+
+**One account is deliberately left alone:** `anik89bd@gmail.com`, a STUDENT enrolled through the
+app, keeps its address. The migration only rewrites the two old demo suffixes, never a real mailbox.
+
 The product was renamed from PEN SMS to **INX SMS**, an INXAPP Limited product, and the demo
 accounts moved onto the company domain. No Cloudflare resource is created, renamed or deleted:
 `inxapp-sms`, `inxapp-sms-api` and `inxapp-sms-files` already carried the company name.
